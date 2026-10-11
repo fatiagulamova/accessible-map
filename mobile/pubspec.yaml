@@ -1,0 +1,56 @@
+name: accessible_map
+description: "Bedensel Engelliler İçin Crowdsourced Erişilebilirlik Haritası"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI & Icons
+  cupertino_icons: ^1.0.8
+
+  # Supabase (backend: auth, database, storage)
+  supabase_flutter: ^2.5.6
+
+  # State Management (professional, testable)
+  flutter_riverpod: ^2.5.1
+
+  # Routing
+  go_router: ^14.2.0
+
+  # Map (OpenStreetMap)
+  flutter_map: ^7.0.1
+  latlong2: ^0.9.1
+
+  # Location & Device
+  geolocator: ^12.0.0
+  image_picker: ^1.1.2
+  permission_handler: ^11.3.1
+
+  # Network & JSON
+  http: ^1.2.2
+
+  # Storage (for token / local cache)
+  shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.2
+
+  # Utils
+  intl: ^0.19.0
+  uuid: ^4.4.2
+  flutter_dotenv: ^5.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - .env
