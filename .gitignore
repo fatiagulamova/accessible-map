@@ -1,0 +1,23 @@
+# Flutter
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins
+mobile/pubspec.lock
+
+# Supabase
+supabase/.env
+supabase/.temp/
+
+# Secrets
+.env
+.env.local
+secrets.json
+*.key
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
