@@ -43,9 +43,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (success) {
-      context.go('/map');
-    } else {
+    if (!success) {
       final state = ref.read(authControllerProvider);
       if (state is AuthError) {
         ScaffoldMessenger.of(context).showSnackBar(

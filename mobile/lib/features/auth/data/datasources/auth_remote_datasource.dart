@@ -132,7 +132,9 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     } on sb.AuthException catch (e) {
       throw AuthException(message: _translateAuthError(e.message));
     } catch (e) {
-      throw ServerException(message: 'Şifre sıfırlama e-postası gönderilemedi');
+      throw const ServerException(
+        message: 'Şifre sıfırlama e-postası gönderilemedi',
+      );
     }
   }
 

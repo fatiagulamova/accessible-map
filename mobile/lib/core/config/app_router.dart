@@ -13,12 +13,33 @@ import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/map/presentation/pages/map_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
+  final refreshNotifier = ValueNotifier<AuthState>(
+    ref.read(authControllerProvider),
+  );
+
+  // Uygulama açıldığında mevcut kullanıcıyı yükle
+  Future.microtask(
+    () => ref.read(authControllerProvider.notifier).loadCurrentUser(),
+  );
+
+  ref.listen<AuthState>(authControllerProvider, (previous, next) {
+    refreshNotifier.value = next;
+  });
+
+  ref.onDispose(() => refreshNotifier.dispose());
+
   return GoRouter(
-    initialLocation: '/login',
+    initialLocation: '/splash',
     // Auth state değiştiğinde otomatik yönlendirme
-    refreshListenable: _RouterRefreshNotifier(ref),
+    refreshListenable: refreshNotifier,
     redirect: (context, state) {
-      final authState = ref.read(authControllerProvider);
+      final authState = refreshNotifier.value; // Read from notifier for accuracy
+
+      // İlk yükleme sırasında splash ekranında kal
+      if (authState is AuthInitial || authState is AuthLoading) {
+        return state.matchedLocation == '/splash' ? null : '/splash';
+      }
+
       final isAuthenticated = authState is AuthAuthenticated;
       final isAuthRoute =
           state.matchedLocation == '/login' || state.matchedLocation == '/register';
@@ -28,8 +49,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return '/login';
       }
 
-      // Kullanıcı giriş yapmış ve auth sayfasında ise → map'e yönlendir
-      if (isAuthenticated && isAuthRoute) {
+      // Kullanıcı giriş yapmış ve auth/splash sayfasında ise → map'e yönlendir
+      if (isAuthenticated &&
+          (isAuthRoute || state.matchedLocation == '/splash')) {
         return '/map';
       }
 
@@ -37,6 +59,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/splash',
+        name: 'splash',
+        builder: (context, state) => const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      ),
       GoRoute(
         path: '/login',
         name: 'login',
@@ -55,14 +84,3 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
-
-// ============================================================
-// Router yenileyici - auth state değişikliğinde router'ı yeniler
-// ============================================================
-class _RouterRefreshNotifier extends ChangeNotifier {
-  _RouterRefreshNotifier(Ref ref) {
-    ref.listen(authControllerProvider, (previous, next) {
-      notifyListeners();
-    });
-  }
-}

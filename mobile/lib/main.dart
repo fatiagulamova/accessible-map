@@ -21,7 +21,7 @@ Future<void> main() async {
   // Supabase'i başlat
   await Supabase.initialize(
     url: SupabaseConfig.url,
-    anonKey: SupabaseConfig.anonKey,
+    publishableKey: SupabaseConfig.anonKey,
   );
 
   // Uygulamayı Riverpod ile başlat

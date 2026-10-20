@@ -3,7 +3,6 @@
 // Auth repository'nin soyut (abstract) arayüzü
 // ============================================================
 
-import 'package:accessible_map/core/errors/failures.dart';
 import '../entities/user_entity.dart';
 
 /// Auth işlemlerini tanımlayan sözleşme.

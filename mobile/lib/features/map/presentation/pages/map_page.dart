@@ -10,14 +10,35 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../../reports/domain/entities/report_entity.dart';
+import '../../../reports/presentation/providers/report_provider.dart';
+import '../../../reports/presentation/widgets/create_report_sheet.dart';
 
-class MapPage extends ConsumerWidget {
+class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
 
+  @override
+  ConsumerState<MapPage> createState() => _MapPageState();
+}
+
+class _MapPageState extends ConsumerState<MapPage> {
   // Bartın merkez koordinatları
   static const LatLng _bartinCenter = LatLng(41.6378, 32.3374);
 
-  Future<void> _handleLogout(BuildContext context, WidgetRef ref) async {
+  @override
+  void initState() {
+    super.initState();
+    // İlk frame'den sonra yakındaki bildirimleri yükle
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(reportControllerProvider.notifier).loadNearbyReports(
+            _bartinCenter.latitude,
+            _bartinCenter.longitude,
+          );
+    });
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {
     // Onay diyaloğu
     final shouldLogout = await showDialog<bool>(
       context: context,
@@ -47,9 +68,12 @@ class MapPage extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
     final user = authState is AuthAuthenticated ? authState.user : null;
+    final reportState = ref.watch(reportControllerProvider);
+    final reports =
+        reportState is ReportLoaded ? reportState.reports : const <ReportEntity>[];
 
     return Scaffold(
       appBar: AppBar(
@@ -75,7 +99,7 @@ class MapPage extends ConsumerWidget {
                 ),
                 onSelected: (value) {
                   if (value == 'logout') {
-                    _handleLogout(context, ref);
+                    _handleLogout(context);
                   } else if (value == 'profile') {
                     // TODO: Profil sayfası
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -170,9 +194,9 @@ class MapPage extends ConsumerWidget {
             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
             userAgentPackageName: 'com.bartin.accessible_map',
           ),
-          const MarkerLayer(
+          MarkerLayer(
             markers: [
-              Marker(
+              const Marker(
                 point: _bartinCenter,
                 width: 50,
                 height: 50,
@@ -182,15 +206,35 @@ class MapPage extends ConsumerWidget {
                   size: 40,
                 ),
               ),
+              ...reports.map(
+                (report) => Marker(
+                  point: LatLng(report.latitude, report.longitude),
+                  width: 44,
+                  height: 44,
+                  child: Tooltip(
+                    message: report.title,
+                    child: const Icon(
+                      Icons.warning,
+                      color: Colors.orange,
+                      size: 32,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // TODO: Engel bildirme
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Engel bildirme yakında')),
+          showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            showDragHandle: true,
+            builder: (_) => CreateReportSheet(
+              latitude: _bartinCenter.latitude,
+              longitude: _bartinCenter.longitude,
+            ),
           );
         },
         backgroundColor: const Color(0xFF26A69A),
