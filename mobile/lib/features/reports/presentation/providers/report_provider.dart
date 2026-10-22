@@ -15,6 +15,7 @@ import '../../domain/entities/report_entity.dart';
 import '../../domain/repositories/report_repository.dart';
 import '../../domain/usecases/create_report_usecase.dart';
 import '../../domain/usecases/get_nearby_reports_usecase.dart';
+import '../../domain/usecases/submit_validation_usecase.dart';
 
 // ============================================================
 // DEPENDENCY PROVIDERS
@@ -37,9 +38,16 @@ final createReportUseCaseProvider = Provider<CreateReportUseCase>((ref) {
   return CreateReportUseCase(ref.watch(reportRepositoryProvider));
 });
 
-final getNearbyReportsUseCaseProvider =
-    Provider<GetNearbyReportsUseCase>((ref) {
+final getNearbyReportsUseCaseProvider = Provider<GetNearbyReportsUseCase>((
+  ref,
+) {
   return GetNearbyReportsUseCase(ref.watch(reportRepositoryProvider));
+});
+
+final submitValidationUseCaseProvider = Provider<SubmitValidationUseCase>((
+  ref,
+) {
+  return SubmitValidationUseCase(ref.watch(reportRepositoryProvider));
 });
 
 // ============================================================
@@ -78,19 +86,27 @@ class ReportError extends ReportState {
 class ReportController extends StateNotifier<ReportState> {
   final GetNearbyReportsUseCase _getNearbyReportsUseCase;
   final CreateReportUseCase _createReportUseCase;
+  final SubmitValidationUseCase _submitValidationUseCase;
   final ReportRemoteDataSource _remoteDataSource;
   final String? Function() _currentUserId;
+
+  String? _lastValidationError;
 
   ReportController({
     required GetNearbyReportsUseCase getNearbyReportsUseCase,
     required CreateReportUseCase createReportUseCase,
+    required SubmitValidationUseCase submitValidationUseCase,
     required ReportRemoteDataSource remoteDataSource,
     required String? Function() currentUserId,
-  })  : _getNearbyReportsUseCase = getNearbyReportsUseCase,
-        _createReportUseCase = createReportUseCase,
-        _remoteDataSource = remoteDataSource,
-        _currentUserId = currentUserId,
-        super(const ReportInitial());
+  }) : _getNearbyReportsUseCase = getNearbyReportsUseCase,
+       _createReportUseCase = createReportUseCase,
+       _submitValidationUseCase = submitValidationUseCase,
+       _remoteDataSource = remoteDataSource,
+       _currentUserId = currentUserId,
+       super(const ReportInitial());
+
+  /// Son doğrulama işlemindeki hata mesajı.
+  String? get lastValidationError => _lastValidationError;
 
   /// Belirtilen konumun yakınındaki bildirimleri yükler.
   Future<void> loadNearbyReports(double lat, double lng) async {
@@ -116,9 +132,7 @@ class ReportController extends StateNotifier<ReportState> {
   }) async {
     final userId = _currentUserId();
     if (userId == null || userId.isEmpty) {
-      state = const ReportError(
-        'Bildirim göndermek için giriş yapmalısınız',
-      );
+      state = const ReportError('Bildirim göndermek için giriş yapmalısınız');
       return false;
     }
 
@@ -148,6 +162,21 @@ class ReportController extends StateNotifier<ReportState> {
     }
   }
 
+  /// Bildirime doğrulama/red oyu kaydeder.
+  /// Başarısız olsa bile mevcut harita işaretlerini korumak için
+  /// genel [ReportState] değiştirilmez.
+  Future<bool> validateReport(String reportId, bool isValid) async {
+    _lastValidationError = null;
+
+    try {
+      await _submitValidationUseCase(reportId: reportId, isValid: isValid);
+      return true;
+    } catch (e) {
+      _lastValidationError = _messageFrom(e);
+      return false;
+    }
+  }
+
   /// Hata mesajını kullanıcıya gösterilecek biçime çevirir.
   String _messageFrom(Object error) {
     if (error is Failure) return error.message;
@@ -158,13 +187,14 @@ class ReportController extends StateNotifier<ReportState> {
 
 final reportControllerProvider =
     StateNotifierProvider<ReportController, ReportState>((ref) {
-  return ReportController(
-    getNearbyReportsUseCase: ref.watch(getNearbyReportsUseCaseProvider),
-    createReportUseCase: ref.watch(createReportUseCaseProvider),
-    remoteDataSource: ref.watch(reportRemoteDataSourceProvider),
-    currentUserId: () {
-      final authState = ref.read(authControllerProvider);
-      return authState is AuthAuthenticated ? authState.user.id : null;
-    },
-  );
-});
+      return ReportController(
+        getNearbyReportsUseCase: ref.watch(getNearbyReportsUseCaseProvider),
+        createReportUseCase: ref.watch(createReportUseCaseProvider),
+        submitValidationUseCase: ref.watch(submitValidationUseCaseProvider),
+        remoteDataSource: ref.watch(reportRemoteDataSourceProvider),
+        currentUserId: () {
+          final authState = ref.read(authControllerProvider);
+          return authState is AuthAuthenticated ? authState.user.id : null;
+        },
+      );
+    });

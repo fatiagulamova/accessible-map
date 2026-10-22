@@ -6,7 +6,7 @@
 import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../../core/errors/exceptions.dart';
+import '../../../../core/errors/exceptions.dart' hide AuthException;
 import '../../domain/entities/report_entity.dart';
 import '../models/report_model.dart';
 
@@ -19,6 +19,15 @@ abstract class ReportRemoteDataSource {
   });
 
   Future<void> createReport(ReportEntity report);
+
+  Future<void> submitValidation({
+    required String reportId,
+    required bool isValid,
+  });
+
+  Future<List<ReportEntity>> getAllReports();
+
+  Future<void> deleteReport(String reportId);
 
   Future<String> uploadReportPhoto(XFile photo);
 }
@@ -47,9 +56,7 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
     final rows = response as List<dynamic>;
     return rows
         .map(
-          (row) => ReportModel.fromJson(
-            Map<String, dynamic>.from(row as Map),
-          ),
+          (row) => ReportModel.fromJson(Map<String, dynamic>.from(row as Map)),
         )
         .toList();
   }
@@ -57,14 +64,15 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
   @override
   Future<void> createReport(ReportEntity report) async {
     // 1. Konumu kaydet
-    final location = await _supabase
-        .from('locations')
-        .insert({
-          'latitude': report.latitude,
-          'longitude': report.longitude,
-        })
-        .select('id')
-        .single();
+    final location =
+        await _supabase
+            .from('locations')
+            .insert({
+              'latitude': report.latitude,
+              'longitude': report.longitude,
+            })
+            .select('id')
+            .single();
 
     final locationId = location['id'] as String?;
     if (locationId == null) {
@@ -80,6 +88,61 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
   }
 
   @override
+  Future<void> submitValidation({
+    required String reportId,
+    required bool isValid,
+  }) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      throw const AuthException('Oy kaydetmek için giriş yapmalısınız');
+    }
+
+    try {
+      await _supabase.from('validations').insert({
+        'report_id': reportId,
+        'user_id': user.id,
+        'is_valid': isValid,
+      });
+    } on PostgrestException catch (e) {
+      final isDuplicateVote =
+          e.code == '23505' ||
+          e.message.toLowerCase().contains('duplicate key');
+
+      if (isDuplicateVote) {
+        throw ValidationException(
+          message: 'Bu bildirimi zaten oyladınız.',
+          code: e.code,
+        );
+      }
+
+      throw ServerException(
+        message: 'Oy kaydedilemedi: ${e.message}',
+        code: e.code,
+      );
+    }
+  }
+
+  @override
+  Future<List<ReportEntity>> getAllReports() async {
+    // Konum bilgisi ayrı tabloda tutulduğu için ilişkiyi de seç.
+    final response = await _supabase
+        .from('reports')
+        .select('*, locations(latitude, longitude)')
+        .order('created_at', ascending: false);
+
+    return response
+        .map<ReportEntity>(
+          (row) => ReportModel.fromJson(Map<String, dynamic>.from(row)),
+        )
+        .toList();
+  }
+
+  @override
+  Future<void> deleteReport(String reportId) async {
+    await _supabase.from('reports').delete().eq('id', reportId);
+  }
+
+  @override
   Future<String> uploadReportPhoto(XFile photo) async {
     try {
       final bytes = await photo.readAsBytes();
@@ -88,7 +151,9 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
       final fileName =
           'report_${DateTime.now().millisecondsSinceEpoch}.$extension';
 
-      await _supabase.storage.from('report_photos').uploadBinary(
+      await _supabase.storage
+          .from('report_photos')
+          .uploadBinary(
             fileName,
             bytes,
             fileOptions: FileOptions(contentType: _contentType(extension)),

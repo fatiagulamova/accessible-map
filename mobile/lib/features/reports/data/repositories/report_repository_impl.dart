@@ -41,6 +41,33 @@ class ReportRepositoryImpl implements ReportRepository {
     });
   }
 
+  @override
+  Future<void> submitValidation({
+    required String reportId,
+    required bool isValid,
+  }) {
+    return _handleExceptions(() async {
+      await remoteDataSource.submitValidation(
+        reportId: reportId,
+        isValid: isValid,
+      );
+    });
+  }
+
+  @override
+  Future<List<ReportEntity>> getAllReports() {
+    return _handleExceptions(() async {
+      return await remoteDataSource.getAllReports();
+    });
+  }
+
+  @override
+  Future<void> deleteReport(String reportId) {
+    return _handleExceptions(() async {
+      await remoteDataSource.deleteReport(reportId);
+    });
+  }
+
   // ============================================================
   // YARDIMCI METOD
   // Exception'ları Failure'lara çevirir (UI'da gösterilecek)

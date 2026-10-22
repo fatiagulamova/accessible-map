@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../providers/report_provider.dart';
+import '../report_categories.dart';
 
 class CreateReportSheet extends ConsumerStatefulWidget {
   final double latitude;
@@ -35,12 +36,46 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
   Uint8List? _previewBytes;
   bool _isPickingImage = false;
   bool _isSubmitting = false;
+  String? _selectedCategory;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController.addListener(_syncSelectedCategory);
+  }
 
   @override
   void dispose() {
+    _titleController.removeListener(_syncSelectedCategory);
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  void _syncSelectedCategory() {
+    final title = _titleController.text.trim();
+
+    String? matchingLabel;
+    for (final category in ReportCategory.values) {
+      if (category.label == title) {
+        matchingLabel = category.label;
+        break;
+      }
+    }
+
+    if (!mounted || matchingLabel == _selectedCategory) return;
+    setState(() => _selectedCategory = matchingLabel);
+  }
+
+  void _selectCategory(ReportCategory category) {
+    _titleController.value = TextEditingValue(
+      text: category.label,
+      selection: TextSelection.collapsed(offset: category.label.length),
+    );
+
+    if (_selectedCategory != category.label) {
+      setState(() => _selectedCategory = category.label);
+    }
   }
 
   Future<void> _handlePickPhoto() async {
@@ -116,9 +151,10 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
     }
 
     final state = ref.read(reportControllerProvider);
-    final message = state is ReportError
-        ? state.message
-        : 'Bildirim gönderilemedi, lütfen tekrar deneyin';
+    final message =
+        state is ReportError
+            ? state.message
+            : 'Bildirim gönderilemedi, lütfen tekrar deneyin';
 
     messenger.showSnackBar(
       SnackBar(
@@ -126,6 +162,62 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
       ),
+    );
+  }
+
+  Widget _buildCategorySection(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Kategori',
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var i = 0; i < ReportCategory.values.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                _buildCategoryChip(context, ReportCategory.values[i]),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryChip(BuildContext context, ReportCategory category) {
+    final isSelected = _selectedCategory == category.label;
+    final foregroundColor = isSelected ? Colors.white : category.color;
+
+    return ChoiceChip(
+      selected: isSelected,
+      showCheckmark: false,
+      onSelected: (_) => _selectCategory(category),
+      avatar: Icon(category.icon, size: 18, color: foregroundColor),
+      label: Text(
+        category.label,
+        style: TextStyle(
+          color: foregroundColor,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      labelPadding: const EdgeInsets.only(left: 2, right: 4),
+      backgroundColor: category.color.withValues(alpha: 0.10),
+      selectedColor: category.color,
+      side: BorderSide(
+        color: category.color.withValues(alpha: isSelected ? 1 : 0.35),
+      ),
+      shape: const StadiumBorder(),
     );
   }
 
@@ -146,24 +238,19 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
               children: [
                 const Text(
                   'Engel Bildir',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Konum: ${widget.latitude.toStringAsFixed(5)}, '
                   '${widget.longitude.toStringAsFixed(5)}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 20),
+                _buildCategorySection(context),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _titleController,
-                  autofocus: true,
                   maxLength: 150,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
@@ -226,16 +313,18 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
                   const SizedBox(height: 12),
                 ],
                 OutlinedButton.icon(
-                  onPressed: _isSubmitting || _isPickingImage
-                      ? null
-                      : _handlePickPhoto,
-                  icon: _isPickingImage
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        )
-                      : const Icon(Icons.photo_library_outlined),
+                  onPressed:
+                      _isSubmitting || _isPickingImage
+                          ? null
+                          : _handlePickPhoto,
+                  icon:
+                      _isPickingImage
+                          ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          )
+                          : const Icon(Icons.photo_library_outlined),
                   label: Text(
                     _selectedImage == null
                         ? 'Fotoğraf Seç'
@@ -245,16 +334,17 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
                   onPressed: _isSubmitting ? null : _handleSubmit,
-                  icon: _isSubmitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.send),
+                  icon:
+                      _isSubmitting
+                          ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                          : const Icon(Icons.send),
                   label: Text(_isSubmitting ? 'Gönderiliyor...' : 'Gönder'),
                 ),
               ],

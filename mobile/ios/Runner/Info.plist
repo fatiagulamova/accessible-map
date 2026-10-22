@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Engel bildirimlerine fotoğraf eklemek için fotoğraflarınıza erişim gereklidir.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Navigasyon başlangıç noktası için mevcut konumunuza erişim gereklidir.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -5,7 +5,8 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.4.0 <4.0.0'
+  sdk: '>=3.7.0 <4.0.0'
+  flutter: '>=3.29.0'
 
 dependencies:
   flutter:
@@ -23,9 +24,8 @@ dependencies:
   # Routing
   go_router: ^14.2.0
 
-  # Map (OpenStreetMap)
-  flutter_map: ^7.0.1
-  latlong2: ^0.9.1
+  # Map (MapLibre + OpenFreeMap, 3D buildings)
+  maplibre_gl: ^0.27.1
 
   # Location & Device
   geolocator: ^12.0.0
@@ -54,3 +54,5 @@ flutter:
 
   assets:
     - .env
+    - assets/icons/report_warning.png
+    - assets/icons/selected_location.png
