@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../providers/profile_stats_provider.dart';
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
@@ -62,6 +63,7 @@ class ProfilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authControllerProvider);
     final user = authState is AuthAuthenticated ? authState.user : null;
+    final statsAsync = ref.watch(profileStatsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -122,7 +124,33 @@ class ProfilePage extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 28),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'İstatistikler',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => ref.invalidate(profileStatsProvider),
+                          tooltip: 'İstatistikleri yenile',
+                          icon: const Icon(Icons.refresh),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    statsAsync.when(
+                      loading: () => const _StatsLoadingCard(),
+                      error:
+                          (error, _) => _StatsErrorCard(
+                            onRetry: () => ref.invalidate(profileStatsProvider),
+                          ),
+                      data: (stats) => _UserStatsView(stats: stats),
+                    ),
+                    const SizedBox(height: 28),
                     Text(
                       'Hesap Bilgileri',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -212,6 +240,178 @@ class ProfilePage extends ConsumerWidget {
                   ],
                 ),
               ),
+    );
+  }
+}
+
+class _UserStatsView extends StatelessWidget {
+  final ProfileStats stats;
+
+  const _UserStatsView({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final approvalsColor =
+        theme.brightness == Brightness.dark
+            ? const Color(0xFF81C784)
+            : const Color(0xFF2E7D32);
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _StatBox(
+              icon: Icons.assignment_outlined,
+              value: stats.totalReports,
+              label: 'Bildirimlerim',
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _StatBox(
+              icon: Icons.verified_outlined,
+              value: stats.totalValidations,
+              label: 'Aldığım Onaylar',
+              color: approvalsColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatBox extends StatelessWidget {
+  final IconData icon;
+  final int value;
+  final String label;
+  final Color color;
+
+  const _StatBox({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 26),
+          const SizedBox(height: 10),
+          Text(
+            '$value',
+            style: theme.textTheme.headlineMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsLoadingCard extends StatelessWidget {
+  const _StatsLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'İstatistikler yükleniyor...',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsErrorCard extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _StatsErrorCard({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.error.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.error_outline, color: colorScheme.error),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'İstatistikler yüklenemedi.',
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Tekrar Dene'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

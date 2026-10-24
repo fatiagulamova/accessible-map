@@ -68,6 +68,36 @@ class SettingsPage extends ConsumerWidget {
             ),
             const SizedBox(height: 28),
             Text(
+              'Etkileşim',
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: colorScheme.primary,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _SettingsCard(
+              child: SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                secondary: Icon(Icons.volume_up, color: colorScheme.primary),
+                title: const Text(
+                  'Sesli Yönlendirme',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text(
+                  'Sesli yönlendirme özelliği yakında kullanıma sunulacaktır.',
+                ),
+                value: settings.isVoiceGuidanceEnabled,
+                onChanged: (value) {
+                  settingsController.setVoiceGuidanceEnabled(value);
+                },
+              ),
+            ),
+            const SizedBox(height: 28),
+            Text(
               'Büyük Yazı',
               style: theme.textTheme.titleSmall?.copyWith(
                 color: colorScheme.primary,
