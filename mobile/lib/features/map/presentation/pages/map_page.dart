@@ -73,6 +73,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   int _destinationSyncRequest = 0;
   int _routeSyncRequest = 0;
   Future<void> _heatmapOperations = Future<void>.value();
+  DateTime? _lastMapControlInteractionAt;
 
   @override
   void initState() {
@@ -159,6 +160,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
+  // Admin heatmap girişi MVP kapsamında gizlendi. Katman altyapısı ileride
+  // yeniden etkinleştirilebilmesi için korunuyor.
+  // ignore: unused_element
   void _toggleHeatmap() {
     setState(() {
       _showHeatmap = !_showHeatmap;
@@ -582,15 +586,36 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   void _handleMapClick(LatLng coordinates) {
-    if (_isSelectingDestination) {
-      _handleDestinationSelected(coordinates);
-      return;
-    }
+    // FAB veya harita üzerindeki Flutter kontrollerine yapılan dokunuşların
+    // MapLibre tarafında ikinci kez işlenmesini engelle.
+    if (_shouldIgnoreMapClick) return;
 
-    setState(() {
-      _selectedLocation = coordinates;
-    });
-    unawaited(_syncSelectionSymbol());
+    // Harita dokunuşları yalnızca hedef seçimi modunda işlenir.
+    if (!_isSelectingDestination) return;
+
+    _handleDestinationSelected(coordinates);
+  }
+
+  bool get _shouldIgnoreMapClick {
+    final lastInteraction = _lastMapControlInteractionAt;
+    if (lastInteraction == null) return false;
+
+    return DateTime.now().difference(lastInteraction) <
+        const Duration(milliseconds: 500);
+  }
+
+  Widget _guardMapControl(Widget child) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => _markMapControlInteraction(),
+      onPointerUp: (_) => _markMapControlInteraction(),
+      onPointerCancel: (_) => _markMapControlInteraction(),
+      child: child,
+    );
+  }
+
+  void _markMapControlInteraction() {
+    _lastMapControlInteractionAt = DateTime.now();
   }
 
   void _handleSearchLocationSelected(double latitude, double longitude) {
@@ -804,23 +829,13 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   Widget _buildMapHint(BuildContext context) {
-    final selectedLocation = _selectedLocation;
-
     final hintIcon =
-        _isSelectingDestination
-            ? Icons.flag_outlined
-            : selectedLocation == null
-            ? Icons.touch_app_outlined
-            : Icons.place_outlined;
+        _isSelectingDestination ? Icons.flag_outlined : Icons.info_outline;
 
     final hintText =
         _isSelectingDestination
             ? 'Lütfen haritada hedef noktayı seçin'
-            : selectedLocation == null
-            ? 'Bildirim için haritaya dokunun'
-            : 'Seçilen konum: '
-                '${selectedLocation.latitude.toStringAsFixed(5)}, '
-                '${selectedLocation.longitude.toStringAsFixed(5)}';
+            : 'Engel bildirmek için "Engel Bildir" düğmesini kullanın';
 
     return Positioned(
       top: 76,
@@ -885,109 +900,114 @@ class _MapPageState extends ConsumerState<MapPage> {
       top: 124,
       left: 12,
       right: 12,
-      child: Material(
-        elevation: 3,
-        borderRadius: BorderRadius.circular(14),
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.97),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: _routeColor.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
+      child: _guardMapControl(
+        Material(
+          elevation: 3,
+          borderRadius: BorderRadius.circular(14),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.97),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: _routeColor.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.route, color: _routeColor),
                     ),
-                    child: const Icon(Icons.route, color: _routeColor),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Başlangıç: $startLabel',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Bitiş: $endLabel',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(
+                              color:
+                                  Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
+                        const Icon(
+                          Icons.straighten,
+                          size: 16,
+                          color: _routeColor,
+                        ),
+                        const SizedBox(width: 4),
                         Text(
-                          'Başlangıç: $startLabel',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
+                          'Mesafe: ${distanceInKm.toStringAsFixed(2)} km',
+                          style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
-                        const SizedBox(height: 2),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.accessible, size: 16, color: scoreColor),
+                        const SizedBox(width: 4),
                         Text(
-                          'Bitiş: $endLabel',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          'Erişilebilirlik Skoru: '
+                          '${score.toStringAsFixed(0)}/100',
                           style: Theme.of(
                             context,
                           ).textTheme.bodySmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: scoreColor,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 16,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.straighten,
-                        size: 16,
-                        color: _routeColor,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Mesafe: ${distanceInKm.toStringAsFixed(2)} km',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.accessible, size: 16, color: scoreColor),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Erişilebilirlik Skoru: '
-                        '${score.toStringAsFixed(0)}/100',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scoreColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: _clearRoute,
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red[700],
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  icon: const Icon(Icons.clear, size: 18),
-                  label: const Text('Rotayı Temizle'),
+                  ],
                 ),
-              ),
-            ],
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _clearRoute,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red[700],
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    icon: const Icon(Icons.clear, size: 18),
+                    label: const Text('Rotayı Temizle'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1071,18 +1091,6 @@ class _MapPageState extends ConsumerState<MapPage> {
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
         actions: [
-          if (user?.role == UserRole.admin)
-            IconButton(
-              onPressed: _toggleHeatmap,
-              tooltip:
-                  _showHeatmap
-                      ? 'Isı haritasını gizle'
-                      : 'Isı haritasını göster',
-              icon: Icon(
-                Icons.local_fire_department,
-                color: _showHeatmap ? Colors.orangeAccent : Colors.white,
-              ),
-            ),
           // Kullanıcı avatarı
           if (user != null)
             Padding(
@@ -1104,8 +1112,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                     _handleLogout(context);
                   } else if (value == 'profile') {
                     context.go('/profile');
-                  } else if (value == 'admin') {
-                    context.push('/admin');
                   }
                 },
                 itemBuilder:
@@ -1163,20 +1169,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                         ),
                       ),
                       const PopupMenuDivider(),
-                      if (user.isAdmin)
-                        const PopupMenuItem(
-                          value: 'admin',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.admin_panel_settings_outlined,
-                                color: Color(0xFF1565C0),
-                              ),
-                              SizedBox(width: 12),
-                              Text('Admin Paneli'),
-                            ],
-                          ),
-                        ),
                       const PopupMenuItem(
                         value: 'profile',
                         child: Row(
@@ -1234,45 +1226,47 @@ class _MapPageState extends ConsumerState<MapPage> {
               // Gövde AppBar'ın altında başladığı için üst inset'i tekrar eklemiyoruz.
               top: false,
               bottom: false,
-              child: MapSearchBar(
-                onLocationSelected: _handleSearchLocationSelected,
+              child: _guardMapControl(
+                MapSearchBar(onLocationSelected: _handleSearchLocationSelected),
               ),
             ),
           ),
         ],
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton(
-            heroTag: 'navigation-fab',
-            tooltip: 'Navigasyon',
-            onPressed:
-                _isResolvingNavigationStart ? null : _openNavigationSheet,
-            backgroundColor: _routeColor,
-            foregroundColor: Colors.white,
-            child:
-                _isResolvingNavigationStart
-                    ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: Colors.white,
-                      ),
-                    )
-                    : const Icon(Icons.directions),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'report-fab',
-            onPressed: _openCreateReportSheet,
-            backgroundColor: const Color(0xFF26A69A),
-            icon: const Icon(Icons.add_a_photo),
-            label: const Text('Engel Bildir'),
-          ),
-        ],
+      floatingActionButton: _guardMapControl(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            FloatingActionButton(
+              heroTag: 'navigation-fab',
+              tooltip: 'Navigasyon',
+              onPressed:
+                  _isResolvingNavigationStart ? null : _openNavigationSheet,
+              backgroundColor: _routeColor,
+              foregroundColor: Colors.white,
+              child:
+                  _isResolvingNavigationStart
+                      ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                      : const Icon(Icons.directions),
+            ),
+            const SizedBox(height: 12),
+            FloatingActionButton.extended(
+              heroTag: 'report-fab',
+              onPressed: _openCreateReportSheet,
+              backgroundColor: const Color(0xFF26A69A),
+              icon: const Icon(Icons.add_a_photo),
+              label: const Text('Engel Bildir'),
+            ),
+          ],
+        ),
       ),
     );
   }

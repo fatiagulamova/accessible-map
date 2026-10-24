@@ -1,12 +1,12 @@
 // ============================================================
 // route_model.dart
-// OSRM GeoJSON yanıtını RouteEntity'ye çevirir
+// calculate-route-score Edge Function yanıtını RouteEntity'ye çevirir
 // ============================================================
 
 import '../../../../core/errors/exceptions.dart';
 import '../../domain/entities/route_entity.dart';
 
-/// Data katmanı modeli - OSRM JSON dönüşümlerinden sorumlu.
+/// Data katmanı modeli - Edge Function rota yanıtını dönüştürür.
 class RouteModel extends RouteEntity {
   const RouteModel({
     required super.id,
@@ -20,45 +20,27 @@ class RouteModel extends RouteEntity {
     required super.algorithmUsed,
   });
 
-  /// OSRM `/route/v1/foot/...` yanıtını [RouteModel]'e çevirir.
+  /// `calculate-route-score` Edge Function yanıtını [RouteModel]'e çevirir.
   ///
-  /// OSRM GeoJSON koordinatları `[longitude, latitude]` sırasındadır.
-  /// Erişilebilirlik puanı başlangıçta 100'dür; datasource, yakındaki
-  /// bildirim ve özelliklere göre [copyWith] ile günceller.
-  factory RouteModel.fromOsrmJson(
+  /// Yanıt biçimi: `{ geometry: [[longitude, latitude], ...], distance, score }`.
+  factory RouteModel.fromEdgeFunctionJson(
     Map<String, dynamic> json,
     double startLat,
     double startLng,
     double endLat,
     double endLng,
   ) {
-    final code = json['code'];
-    final routes = json['routes'];
+    final geometry = json['geometry'];
 
-    if (code is! String ||
-        code.toLowerCase() != 'ok' ||
-        routes is! List ||
-        routes.isEmpty) {
-      throw ServerException(
-        message:
-            code == null
-                ? 'OSRM rotası bulunamadı'
-                : 'OSRM rotası bulunamadı (kod: $code)',
-      );
-    }
-
-    final route = _asMap(routes.first, 'rota');
-    final geometry = _asMap(route['geometry'], 'geometri');
-    final coordinates = geometry['coordinates'];
-
-    if (coordinates is! List || coordinates.isEmpty) {
-      throw const ServerException(message: 'OSRM rota geometrisi boş');
+    if (geometry is! List || geometry.isEmpty) {
+      throw const ServerException(message: 'Rota geometrisi bulunamadı');
     }
 
     final pathPoints = <LatLng>[];
-    for (final coordinate in coordinates) {
+
+    for (final coordinate in geometry) {
       if (coordinate is! List || coordinate.length < 2) {
-        throw const ServerException(message: 'OSRM koordinatı geçersiz');
+        throw const ServerException(message: 'Rota koordinatı geçersiz');
       }
 
       // GeoJSON sırası: [longitude, latitude]
@@ -70,14 +52,25 @@ class RouteModel extends RouteEntity {
       );
     }
 
+    final distance = _asDouble(json['distance'], 'mesafe');
+    final score = _asDouble(json['score'], 'erişilebilirlik puanı');
+
+    if (!distance.isFinite || distance < 0) {
+      throw const ServerException(message: 'Rota mesafesi geçersiz');
+    }
+
+    if (!score.isFinite) {
+      throw const ServerException(message: 'Erişilebilirlik puanı geçersiz');
+    }
+
     return RouteModel(
       id: _buildRouteId(startLat, startLng, endLat, endLng),
       startLat: startLat,
       startLng: startLng,
       endLat: endLat,
       endLng: endLng,
-      distanceInMeters: _asDouble(route['distance'], 'mesafe'),
-      accessibilityScore: 100,
+      distanceInMeters: distance,
+      accessibilityScore: score.clamp(0.0, 100.0).toDouble(),
       pathPoints: pathPoints,
       algorithmUsed: 'osrm',
     );
@@ -102,13 +95,6 @@ class RouteModel extends RouteEntity {
   // YARDIMCI METODLAR
   // ============================================================
 
-  static Map<String, dynamic> _asMap(Object? value, String field) {
-    if (value is Map<String, dynamic>) return value;
-    if (value is Map) return Map<String, dynamic>.from(value);
-
-    throw ServerException(message: 'OSRM yanıtında geçersiz $field');
-  }
-
   static double _asDouble(Object? value, String field) {
     if (value is num) return value.toDouble();
     if (value is String) {
@@ -116,7 +102,7 @@ class RouteModel extends RouteEntity {
       if (parsed != null) return parsed;
     }
 
-    throw ServerException(message: 'OSRM yanıtında geçersiz $field');
+    throw ServerException(message: 'Rota yanıtında geçersiz $field');
   }
 
   static String _buildRouteId(

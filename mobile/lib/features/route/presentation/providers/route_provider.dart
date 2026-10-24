@@ -4,7 +4,6 @@
 // ============================================================
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 
 import '../../../../core/errors/exceptions.dart' as core;
 import '../../../../core/errors/failures.dart';
@@ -19,19 +18,9 @@ import '../../domain/usecases/get_accessible_route_usecase.dart';
 // DEPENDENCY PROVIDERS
 // ============================================================
 
-/// OSRM isteklerinde kullanılacak HTTP istemcisi.
-final routeHttpClientProvider = Provider<http.Client>((ref) {
-  final client = http.Client();
-  ref.onDispose(client.close);
-  return client;
-});
-
 /// Remote data source
 final routeRemoteDataSourceProvider = Provider<RouteRemoteDataSource>((ref) {
-  return RouteRemoteDataSourceImpl(
-    httpClient: ref.watch(routeHttpClientProvider),
-    supabase: ref.watch(supabaseClientProvider),
-  );
+  return RouteRemoteDataSourceImpl(supabase: ref.watch(supabaseClientProvider));
 });
 
 /// Repository

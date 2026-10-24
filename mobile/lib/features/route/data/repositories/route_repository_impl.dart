@@ -3,9 +3,6 @@
 // RouteRepository arayüzünün gerçek implementasyonu
 // ============================================================
 
-import 'dart:async';
-
-import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../../../core/errors/exceptions.dart' as core;
@@ -47,10 +44,6 @@ class RouteRepositoryImpl implements RouteRepository {
       throw AuthFailure(message: e.message, code: e.statusCode);
     } on sb.PostgrestException catch (e) {
       throw ServerFailure(message: e.message, code: e.code);
-    } on http.ClientException catch (e) {
-      throw NetworkFailure(message: 'Ağ bağlantısı hatası: ${e.message}');
-    } on TimeoutException {
-      throw const NetworkFailure();
     } on core.AuthException catch (e) {
       throw AuthFailure(message: e.message, code: e.code);
     } on core.NetworkException catch (e) {
