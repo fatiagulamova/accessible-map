@@ -67,6 +67,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   bool _isSelectingDestination = false;
   bool _isNavigationSheetOpen = false;
   bool _isResolvingNavigationStart = false;
+  bool _isResolvingReportLocation = false;
   bool _isReportDetailOpen = false;
   int _reportSyncRequest = 0;
   int _selectionSyncRequest = 0;
@@ -639,6 +640,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   Future<void> _openCreateReportSheet() async {
+    if (_isResolvingReportLocation) return;
+
     if (_isSelectingDestination) {
       setState(() {
         _isSelectingDestination = false;
@@ -648,7 +651,28 @@ class _MapPageState extends ConsumerState<MapPage> {
       unawaited(_syncDestinationMarker());
     }
 
-    final location = _selectedLocation ?? _bartinCenter;
+    setState(() => _isResolvingReportLocation = true);
+
+    LatLng? gpsLocation;
+    try {
+      gpsLocation = await _resolveReportLocation();
+    } finally {
+      if (mounted) {
+        setState(() => _isResolvingReportLocation = false);
+      }
+    }
+
+    if (!mounted) return;
+
+    final location = gpsLocation ?? _bartinCenter;
+    if (gpsLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('GPS konumu alınamadı, harita merkezi kullanılıyor.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
 
     await showModalBottomSheet<void>(
       context: context,
@@ -658,8 +682,37 @@ class _MapPageState extends ConsumerState<MapPage> {
           (_) => CreateReportSheet(
             latitude: location.latitude,
             longitude: location.longitude,
+            isUsingFallbackLocation: gpsLocation == null,
           ),
     );
+  }
+
+  Future<LatLng?> _resolveReportLocation() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return null;
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 8),
+      );
+
+      // Bildirimde GPS'ten gelen koordinatları yuvarlamadan kullan.
+      return LatLng(position.latitude, position.longitude);
+    } catch (error) {
+      debugPrint('Bildirim konumu alınamadı: $error');
+      return null;
+    }
   }
 
   Future<LatLng> _resolveNavigationStart() async {
@@ -1260,10 +1313,30 @@ class _MapPageState extends ConsumerState<MapPage> {
             const SizedBox(height: 12),
             FloatingActionButton.extended(
               heroTag: 'report-fab',
-              onPressed: _openCreateReportSheet,
+              tooltip:
+                  _isResolvingReportLocation
+                      ? 'Konum alınıyor'
+                      : 'Engel Bildir',
+              onPressed:
+                  _isResolvingReportLocation ? null : _openCreateReportSheet,
               backgroundColor: const Color(0xFF26A69A),
-              icon: const Icon(Icons.add_a_photo),
-              label: const Text('Engel Bildir'),
+              foregroundColor: Colors.white,
+              icon:
+                  _isResolvingReportLocation
+                      ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                      : const Icon(Icons.add_a_photo),
+              label: Text(
+                _isResolvingReportLocation
+                    ? 'Konum alınıyor...'
+                    : 'Engel Bildir',
+              ),
             ),
           ],
         ),

@@ -15,11 +15,13 @@ import '../report_categories.dart';
 class CreateReportSheet extends ConsumerStatefulWidget {
   final double latitude;
   final double longitude;
+  final bool isUsingFallbackLocation;
 
   const CreateReportSheet({
     super.key,
     required this.latitude,
     required this.longitude,
+    this.isUsingFallbackLocation = false,
   });
 
   @override
@@ -224,6 +226,7 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
@@ -242,11 +245,50 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Konum: ${widget.latitude.toStringAsFixed(5)}, '
-                  '${widget.longitude.toStringAsFixed(5)}',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                TextFormField(
+                  initialValue:
+                      '${widget.latitude.toStringAsFixed(5)}, '
+                      '${widget.longitude.toStringAsFixed(5)}',
+                  readOnly: true,
+                  showCursor: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Konum',
+                    prefixIcon: Icon(Icons.location_on_outlined),
+                    helperText: 'Konum otomatik olarak alındı',
+                  ),
                 ),
+                if (widget.isUsingFallbackLocation) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 20,
+                          color: theme.colorScheme.onErrorContainer,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'GPS konumu alınamadı, harita merkezi kullanılıyor.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onErrorContainer,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 _buildCategorySection(context),
                 const SizedBox(height: 16),
