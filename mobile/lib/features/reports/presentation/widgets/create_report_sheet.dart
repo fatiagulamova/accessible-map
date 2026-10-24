@@ -139,6 +139,7 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
     setState(() => _isSubmitting = false);
 
     if (success) {
+      ref.invalidate(getRecentReportsProvider);
       Navigator.of(context).pop();
       messenger.showSnackBar(
         const SnackBar(

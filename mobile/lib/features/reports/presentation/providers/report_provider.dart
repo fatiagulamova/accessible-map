@@ -50,6 +50,49 @@ final submitValidationUseCaseProvider = Provider<SubmitValidationUseCase>((
   return SubmitValidationUseCase(ref.watch(reportRepositoryProvider));
 });
 
+/// Bildirimler sekmesindeki akış için en son 50 bildirimi getirir.
+final getRecentReportsProvider = FutureProvider<List<ReportEntity>>((ref) {
+  return ref.watch(reportRepositoryProvider).getAllRecentReports();
+});
+
+// ============================================================
+// REPORT FILTER
+// ============================================================
+
+/// Bildirim akışına uygulanan yerel filtreleri temsil eder.
+///
+/// [status] veya [category] değerinin null olması ilgili filtre için
+/// "Tümü" seçeneğinin aktif olduğu anlamına gelir.
+class ReportFilter {
+  final ReportStatus? status;
+  final String? category;
+
+  const ReportFilter({this.status, this.category});
+
+  /// Herhangi bir filtre aktif mi?
+  bool get isActive => status != null || category != null;
+
+  /// Verilen bildirimin bu filtreyle eşleşip eşleşmediğini kontrol eder.
+  bool matches(ReportEntity report) {
+    if (status != null && report.status != status) {
+      return false;
+    }
+
+    final selectedCategory = category;
+    if (selectedCategory != null &&
+        !report.title.toLowerCase().contains(selectedCategory.toLowerCase())) {
+      return false;
+    }
+
+    return true;
+  }
+}
+
+/// Bildirim akışındaki durum ve kategori filtrelerini yönetir.
+final reportFilterProvider = StateProvider<ReportFilter>(
+  (ref) => const ReportFilter(),
+);
+
 // ============================================================
 // REPORT STATE
 // ============================================================

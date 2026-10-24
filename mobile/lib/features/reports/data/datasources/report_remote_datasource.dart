@@ -27,6 +27,9 @@ abstract class ReportRemoteDataSource {
 
   Future<List<ReportEntity>> getAllReports();
 
+  /// Bildirim akışında gösterilecek en son 50 bildirimi getirir.
+  Future<List<ReportEntity>> getAllRecentReports();
+
   Future<void> deleteReport(String reportId);
 
   Future<String> uploadReportPhoto(XFile photo);
@@ -129,6 +132,24 @@ class ReportRemoteDataSourceImpl implements ReportRemoteDataSource {
         .from('reports')
         .select('*, locations(latitude, longitude)')
         .order('created_at', ascending: false);
+
+    return response
+        .map<ReportEntity>(
+          (row) => ReportModel.fromJson(Map<String, dynamic>.from(row)),
+        )
+        .toList();
+  }
+
+  @override
+  Future<List<ReportEntity>> getAllRecentReports() async {
+    final response = await _supabase
+        .from('reports')
+        .select(
+          'id, user_id, title, description, photo_url, status, created_at, '
+          'locations(latitude, longitude)',
+        )
+        .order('created_at', ascending: false)
+        .limit(50);
 
     return response
         .map<ReportEntity>(

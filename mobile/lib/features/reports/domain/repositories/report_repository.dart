@@ -27,6 +27,9 @@ abstract class ReportRepository {
   /// Konum sınırı olmadan tüm bildirimleri getirir.
   Future<List<ReportEntity>> getAllReports();
 
+  /// Bildirim akışında gösterilecek en son 50 bildirimi getirir.
+  Future<List<ReportEntity>> getAllRecentReports();
+
   /// Bildirimi kimliğine göre siler.
   Future<void> deleteReport(String reportId);
 }

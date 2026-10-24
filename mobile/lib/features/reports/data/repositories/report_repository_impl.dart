@@ -62,6 +62,13 @@ class ReportRepositoryImpl implements ReportRepository {
   }
 
   @override
+  Future<List<ReportEntity>> getAllRecentReports() {
+    return _handleExceptions(() async {
+      return await remoteDataSource.getAllRecentReports();
+    });
+  }
+
+  @override
   Future<void> deleteReport(String reportId) {
     return _handleExceptions(() async {
       await remoteDataSource.deleteReport(reportId);
