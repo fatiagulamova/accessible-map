@@ -29,6 +29,8 @@ class CreateReportSheet extends ConsumerStatefulWidget {
 }
 
 class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
+  static const Color _brandColor = Color(0xFF1565C0);
+
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -59,8 +61,8 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
 
     String? matchingLabel;
     for (final category in ReportCategory.values) {
-      if (category.label == title) {
-        matchingLabel = category.label;
+      if (category.displayLabel == title || category.label == title) {
+        matchingLabel = category.displayLabel;
         break;
       }
     }
@@ -71,12 +73,12 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
 
   void _selectCategory(ReportCategory category) {
     _titleController.value = TextEditingValue(
-      text: category.label,
-      selection: TextSelection.collapsed(offset: category.label.length),
+      text: category.displayLabel,
+      selection: TextSelection.collapsed(offset: category.displayLabel.length),
     );
 
-    if (_selectedCategory != category.label) {
-      setState(() => _selectedCategory = category.label);
+    if (_selectedCategory != category.displayLabel) {
+      setState(() => _selectedCategory = category.displayLabel);
     }
   }
 
@@ -168,59 +170,368 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
     );
   }
 
+  Widget _buildSectionTitle(BuildContext context, String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Color(0xFF1A2B4C),
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.1,
+      ),
+    );
+  }
+
+  Widget _buildLocationBanner(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _brandColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _brandColor.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: _brandColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.location_on_rounded,
+              color: _brandColor,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Konum',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${widget.latitude.toStringAsFixed(5)}, '
+                  '${widget.longitude.toStringAsFixed(5)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (widget.isUsingFallbackLocation) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        size: 15,
+                        color: Color(0xFFE65100),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'GPS konumu alınamadı, harita merkezi kullanıldı.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFFE65100),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCategorySection(BuildContext context) {
+    final options = ReportCategory.values
+        .where((category) => category != ReportCategory.other)
+        .toList(growable: false);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, 'Engel Türü'),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < options.length; i++) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(child: _buildCategoryCard(context, options[i])),
+            ],
+          ],
+        ),
+        const SizedBox(height: 10),
+        _buildOtherCard(context, ReportCategory.other),
+      ],
+    );
+  }
+
+  Widget _buildCategoryCard(BuildContext context, ReportCategory category) {
+    final isSelected = _selectedCategory == category.displayLabel;
+    final color = category.color;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _selectCategory(category),
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? color : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AspectRatio(
+                aspectRatio: 1,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: isSelected ? 0.45 : 0.28),
+                        blurRadius: isSelected ? 10 : 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(category.icon, size: 28, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                category.displayLabel,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isSelected ? color : const Color(0xFF1A2B4C),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOtherCard(BuildContext context, ReportCategory category) {
+    final isSelected = _selectedCategory == category.displayLabel;
+    final color = category.color;
+
+    return Material(
+      color: isSelected ? color.withValues(alpha: 0.10) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: isSelected ? color : const Color(0xFFE0E4EA),
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _selectCategory(category),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(category.icon, size: 20, color: Colors.white),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                category.displayLabel,
+                style: TextStyle(
+                  color: isSelected ? color : const Color(0xFF1A2B4C),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhotoSection(BuildContext context) {
     final theme = Theme.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Kategori',
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (var i = 0; i < ReportCategory.values.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                _buildCategoryChip(context, ReportCategory.values[i]),
+        _buildSectionTitle(context, 'Fotoğraf Ekle'),
+        const SizedBox(height: 10),
+        if (_previewBytes != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              children: [
+                Image.memory(
+                  _previewBytes!,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  semanticLabel: 'Seçilen fotoğraf önizlemesi',
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Material(
+                    color: Colors.black54,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      tooltip: 'Fotoğrafı kaldır',
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: _removePhoto,
+                    ),
+                  ),
+                ),
               ],
-            ],
+            ),
+          )
+        else
+          _buildPhotoPlaceholder(context),
+        if (_previewBytes != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed:
+                  _isSubmitting || _isPickingImage ? null : _handlePickPhoto,
+              icon:
+                  _isPickingImage
+                      ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      )
+                      : const Icon(Icons.photo_library_outlined, size: 18),
+              label: Text(
+                _selectedImage == null ? 'Fotoğraf Seç' : 'Fotoğrafı Değiştir',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+        if (_isPickingImage && _previewBytes == null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _buildLoadingRow(theme),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingRow(ThemeData theme) {
+    return Row(
+      children: [
+        const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Fotoğraf yükleniyor...',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildCategoryChip(BuildContext context, ReportCategory category) {
-    final isSelected = _selectedCategory == category.label;
-    final foregroundColor = isSelected ? Colors.white : category.color;
+  Widget _buildPhotoPlaceholder(BuildContext context) {
+    final theme = Theme.of(context);
 
-    return ChoiceChip(
-      selected: isSelected,
-      showCheckmark: false,
-      onSelected: (_) => _selectCategory(category),
-      avatar: Icon(category.icon, size: 18, color: foregroundColor),
-      label: Text(
-        category.label,
-        style: TextStyle(
-          color: foregroundColor,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
+    return Material(
+      color: _brandColor.withValues(alpha: 0.03),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: _handlePickPhoto,
+        child: CustomPaint(
+          painter: _DashedBorderPainter(
+            color: _brandColor.withValues(alpha: 0.45),
+          ),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: _brandColor.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.photo_camera_rounded,
+                    color: _brandColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Fotoğraf ekle',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: _brandColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Engelin fotoğrafını yükleyin (isteğe bağlı)',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-      labelPadding: const EdgeInsets.only(left: 2, right: 4),
-      backgroundColor: category.color.withValues(alpha: 0.10),
-      selectedColor: category.color,
-      side: BorderSide(
-        color: category.color.withValues(alpha: isSelected ? 1 : 0.35),
-      ),
-      shape: const StadiumBorder(),
     );
   }
 
@@ -233,7 +544,7 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
       padding: EdgeInsets.only(bottom: bottomInset),
       child: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: Form(
             key: _formKey,
             child: Column(
@@ -242,53 +553,23 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
               children: [
                 const Text(
                   'Engel Bildir',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  initialValue:
-                      '${widget.latitude.toStringAsFixed(5)}, '
-                      '${widget.longitude.toStringAsFixed(5)}',
-                  readOnly: true,
-                  showCursor: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Konum',
-                    prefixIcon: Icon(Icons.location_on_outlined),
-                    helperText: 'Konum otomatik olarak alındı',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1A2B4C),
+                    letterSpacing: -0.3,
                   ),
                 ),
-                if (widget.isUsingFallbackLocation) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          size: 20,
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'GPS konumu alınamadı, harita merkezi kullanılıyor.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onErrorContainer,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                const SizedBox(height: 4),
+                Text(
+                  'Hangi konuda bildirimde bulunmak istiyorsunuz?',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF6B7280),
+                    fontWeight: FontWeight.w500,
                   ),
-                ],
+                ),
+                const SizedBox(height: 16),
+                _buildLocationBanner(context),
                 const SizedBox(height: 20),
                 _buildCategorySection(context),
                 const SizedBox(height: 16),
@@ -296,10 +577,26 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
                   controller: _titleController,
                   maxLength: 150,
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Başlık',
                     hintText: 'Örn. Kaldırımda çukur var',
-                    prefixIcon: Icon(Icons.title),
+                    prefixIcon: const Icon(Icons.title),
+                    filled: true,
+                    fillColor: const Color(0xFFF7F9FC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE0E4EA)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(
+                        color: _brandColor,
+                        width: 1.5,
+                      ),
+                    ),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -314,81 +611,60 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
                   maxLines: 3,
                   maxLength: 500,
                   textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Açıklama',
                     hintText: 'Engeli kısaca açıklayın (isteğe bağlı)',
-                    prefixIcon: Icon(Icons.description_outlined),
+                    prefixIcon: const Icon(Icons.description_outlined),
                     alignLabelWithHint: true,
+                    filled: true,
+                    fillColor: const Color(0xFFF7F9FC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE0E4EA)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(
+                        color: _brandColor,
+                        width: 1.5,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
-                if (_previewBytes != null) ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      children: [
-                        Image.memory(
-                          _previewBytes!,
-                          height: 180,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          semanticLabel: 'Seçilen fotoğraf önizlemesi',
-                        ),
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Material(
-                            color: Colors.black54,
-                            shape: const CircleBorder(),
-                            child: IconButton(
-                              tooltip: 'Fotoğrafı kaldır',
-                              icon: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                              ),
-                              onPressed: _removePhoto,
-                            ),
-                          ),
-                        ),
-                      ],
+                _buildPhotoSection(context),
+                const SizedBox(height: 20),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _brandColor,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: _brandColor.withValues(
+                      alpha: 0.45,
+                    ),
+                    minimumSize: const Size.fromHeight(54),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                ],
-                OutlinedButton.icon(
-                  onPressed:
-                      _isSubmitting || _isPickingImage
-                          ? null
-                          : _handlePickPhoto,
-                  icon:
-                      _isPickingImage
-                          ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2.5),
-                          )
-                          : const Icon(Icons.photo_library_outlined),
-                  label: Text(
-                    _selectedImage == null
-                        ? 'Fotoğraf Seç'
-                        : 'Fotoğrafı Değiştir',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
                   onPressed: _isSubmitting ? null : _handleSubmit,
-                  icon:
+                  child:
                       _isSubmitting
                           ? const SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 22,
+                            height: 22,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
                               color: Colors.white,
                             ),
                           )
-                          : const Icon(Icons.send),
-                  label: Text(_isSubmitting ? 'Gönderiliyor...' : 'Gönder'),
+                          : const Text('Gönder'),
                 ),
               ],
             ),
@@ -397,4 +673,42 @@ class _CreateReportSheetState extends ConsumerState<CreateReportSheet> {
       ),
     );
   }
+}
+
+/// Yarım daire köşeli kesikli (dashed) kenarlık çizer.
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint =
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6;
+
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      const Radius.circular(16),
+    );
+    final path = Path()..addRRect(rrect);
+
+    const dashWidth = 6.0;
+    const dashGap = 4.0;
+
+    for (final metric in path.computeMetrics()) {
+      var start = 0.0;
+      while (start < metric.length) {
+        final end = (start + dashWidth).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(start, end), paint);
+        start += dashWidth + dashGap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

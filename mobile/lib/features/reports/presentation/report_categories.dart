@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 
 /// Bir bildirim kategorisinin form etiketini, ikonunu ve rengini taşır.
 ///
-/// Aynı tanımlar hem bildirim formundaki kategori çiplerinde hem de harita
+/// Aynı tanımlar hem bildirim formundaki kategori kartlarında hem de harita
 /// üzerindeki bildirim işaretlerinde kullanılır.
 @immutable
 class ReportCategory {
@@ -16,51 +16,66 @@ class ReportCategory {
     required this.label,
     required this.icon,
     required this.color,
+    this.formLabel,
+    this.aliases = const <String>[],
   });
 
   /// Harita görsel kimliği için ASCII anahtar (ör. `ramp`).
   final String key;
 
-  /// Kullanıcıya gösterilen kategori adı.
+  /// Kullanıcıya gösterilen kısa kategori adı.
   final String label;
 
   final IconData icon;
   final Color color;
+
+  /// Mockup'a uygun uzun form etiketi; verilmezse [label] kullanılır.
+  final String? formLabel;
+
+  /// Başlığa göre kategori eşleşmesinde kontrol edilen alternatif metinler.
+  final List<String> aliases;
+
+  /// Formda gösterilen etiket.
+  String get displayLabel => formLabel ?? label;
 
   String get markerIconId => 'report-marker-$key';
 
   static const ReportCategory ramp = ReportCategory(
     key: 'ramp',
     label: 'Rampa',
-    icon: Icons.ramp_right,
-    color: Color(0xFF4CAF50),
+    formLabel: 'Rampa Eksikliği',
+    icon: Icons.accessible_forward_rounded,
+    color: Color(0xFF43A047),
   );
 
   static const ReportCategory stairs = ReportCategory(
     key: 'stairs',
     label: 'Merdiven',
-    icon: Icons.stairs,
-    color: Color(0xFFFF9800),
+    icon: Icons.stairs_rounded,
+    color: Color(0xFFF57C00),
   );
 
   static const ReportCategory sidewalk = ReportCategory(
     key: 'sidewalk',
     label: 'Kaldırım',
-    icon: Icons.directions_walk,
-    color: Color(0xFFF44336),
+    formLabel: 'Bozuk Kaldırım',
+    icon: Icons.warning_rounded,
+    color: Color(0xFFE53935),
   );
 
   static const ReportCategory elevator = ReportCategory(
     key: 'elevator',
     label: 'Asansör',
-    icon: Icons.elevator,
-    color: Color(0xFF9C27B0),
+    formLabel: 'Erişilebilir Giriş',
+    icon: Icons.door_front_door_rounded,
+    color: Color(0xFF1565C0),
+    aliases: <String>['erişilebilir giriş'],
   );
 
   static const ReportCategory other = ReportCategory(
     key: 'other',
     label: 'Diğer',
-    icon: Icons.warning_amber_rounded,
+    icon: Icons.more_horiz_rounded,
     color: Color(0xFF9E9E9E),
   );
 
@@ -84,6 +99,11 @@ class ReportCategory {
       if (category == other) continue;
       if (normalizedTitle.contains(category.label.toLowerCase())) {
         return category;
+      }
+      for (final alias in category.aliases) {
+        if (normalizedTitle.contains(alias.toLowerCase())) {
+          return category;
+        }
       }
     }
 

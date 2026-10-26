@@ -21,7 +21,8 @@ dependencies:
   # State Management (professional, testable)
   flutter_riverpod: ^2.5.1
 
-  # Routing
+  # Navigation
+  curved_navigation_bar_pro: ^2.2.1
   go_router: ^14.2.0
 
   # Map (MapLibre + OpenFreeMap, 3D buildings)

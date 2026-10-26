@@ -22,6 +22,26 @@ void main() {
       expect(ReportCategory.forTitle(''), ReportCategory.other);
     });
 
+    test('matches mockup form labels through aliases', () {
+      expect(
+        ReportCategory.forTitle('Erişilebilir Giriş'),
+        ReportCategory.elevator,
+      );
+      expect(
+        ReportCategory.forTitle('Bozuk Kaldırım'),
+        ReportCategory.sidewalk,
+      );
+      expect(ReportCategory.forTitle('Rampa Eksikliği'), ReportCategory.ramp);
+    });
+
+    test('exposes mockup form labels', () {
+      expect(ReportCategory.ramp.displayLabel, 'Rampa Eksikliği');
+      expect(ReportCategory.stairs.displayLabel, 'Merdiven');
+      expect(ReportCategory.sidewalk.displayLabel, 'Bozuk Kaldırım');
+      expect(ReportCategory.elevator.displayLabel, 'Erişilebilir Giriş');
+      expect(ReportCategory.other.displayLabel, 'Diğer');
+    });
+
     test('provides the marker image id expected by the map', () {
       expect(ReportCategory.ramp.markerIconId, 'report-marker-ramp');
       expect(ReportCategory.stairs.markerIconId, 'report-marker-stairs');

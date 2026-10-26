@@ -11,6 +11,7 @@ import '../../features/admin/presentation/pages/admin_dashboard_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/map/presentation/pages/map_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/profile/presentation/pages/settings_page.dart';
@@ -96,6 +97,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return MainNavigationShell(navigationShell: navigationShell);
         },
         branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/home',
+                name: 'home',
+                builder: (context, state) => const HomePage(),
+              ),
+            ],
+          ),
           StatefulShellBranch(
             routes: [
               GoRoute(
