@@ -14,15 +14,17 @@ class RouteModel extends RouteEntity {
     required super.startLng,
     required super.endLat,
     required super.endLng,
-    required super.distanceInMeters,
-    required super.accessibilityScore,
-    required super.pathPoints,
+    required super.candidateRoutes,
     required super.algorithmUsed,
   });
 
   /// `calculate-route-score` Edge Function yanıtını [RouteModel]'e çevirir.
   ///
-  /// Yanıt biçimi: `{ geometry: [[longitude, latitude], ...], distance, score }`.
+  /// Güncel yanıt biçimi:
+  /// `{ routes: [{ geometry: [[lng, lat], ...], distance, score }, ...] }`.
+  ///
+  /// Eski tek rota yanıtı da (`{ geometry, distance, score }`) yeni Edge
+  /// Function dağıtılana kadar desteklenir.
   factory RouteModel.fromEdgeFunctionJson(
     Map<String, dynamic> json,
     double startLat,
@@ -30,6 +32,56 @@ class RouteModel extends RouteEntity {
     double endLat,
     double endLng,
   ) {
+    final candidateRoutes = <RoutePath>[];
+
+    if (json.containsKey('routes')) {
+      final routes = json['routes'];
+
+      if (routes is! List) {
+        throw const ServerException(message: 'Rota listesi geçersiz');
+      }
+
+      if (routes.isEmpty) {
+        throw const ServerException(message: 'Rota bulunamadı');
+      }
+
+      for (final route in routes) {
+        if (route is! Map) {
+          throw const ServerException(message: 'Rota kaydı geçersiz');
+        }
+
+        candidateRoutes.add(_parseRoutePath(Map<String, dynamic>.from(route)));
+      }
+    } else {
+      // Geriye dönük uyumluluk: eski Edge Function tek rota döndürür.
+      candidateRoutes.add(_parseRoutePath(json));
+    }
+
+    return RouteModel(
+      id: _buildRouteId(startLat, startLng, endLat, endLng),
+      startLat: startLat,
+      startLng: startLng,
+      endLat: endLat,
+      endLng: endLng,
+      candidateRoutes: List<RoutePath>.unmodifiable(candidateRoutes),
+      algorithmUsed: 'osrm',
+    );
+  }
+
+  /// Aday rotaları güncellenmiş bir kopya döndürür.
+  RouteModel copyWith({List<RoutePath>? candidateRoutes}) {
+    return RouteModel(
+      id: id,
+      startLat: startLat,
+      startLng: startLng,
+      endLat: endLat,
+      endLng: endLng,
+      candidateRoutes: candidateRoutes ?? this.candidateRoutes,
+      algorithmUsed: algorithmUsed,
+    );
+  }
+
+  static RoutePath _parseRoutePath(Map<String, dynamic> json) {
     final geometry = json['geometry'];
 
     if (geometry is! List || geometry.isEmpty) {
@@ -63,31 +115,10 @@ class RouteModel extends RouteEntity {
       throw const ServerException(message: 'Erişilebilirlik puanı geçersiz');
     }
 
-    return RouteModel(
-      id: _buildRouteId(startLat, startLng, endLat, endLng),
-      startLat: startLat,
-      startLng: startLng,
-      endLat: endLat,
-      endLng: endLng,
-      distanceInMeters: distance,
-      accessibilityScore: score.clamp(0.0, 100.0).toDouble(),
-      pathPoints: pathPoints,
-      algorithmUsed: 'osrm',
-    );
-  }
-
-  /// Erişilebilirlik puanı güncellenmiş bir kopya döndürür.
-  RouteModel copyWith({double? accessibilityScore}) {
-    return RouteModel(
-      id: id,
-      startLat: startLat,
-      startLng: startLng,
-      endLat: endLat,
-      endLng: endLng,
-      distanceInMeters: distanceInMeters,
-      accessibilityScore: accessibilityScore ?? this.accessibilityScore,
-      pathPoints: pathPoints,
-      algorithmUsed: algorithmUsed,
+    return RoutePath(
+      geometry: List<LatLng>.unmodifiable(pathPoints),
+      distance: distance,
+      score: score.clamp(0.0, 100.0).toDouble(),
     );
   }
 

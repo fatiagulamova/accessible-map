@@ -50,8 +50,19 @@ class RouteRemoteDataSourceImpl implements RouteRemoteDataSource {
         );
       }
 
+      final payload = Map<String, dynamic>.from(data);
+      final routes = payload['routes'];
+
+      if (routes != null && routes is! List) {
+        throw const ServerException(
+          message: 'Rota servisi geçersiz bir rota listesi döndürdü',
+        );
+      }
+
+      // Güncel Edge Function `{ routes: [...] }` döndürür. Model, yeni
+      // dağıtım tamamlanana kadar eski tek rota yanıtını da kabul eder.
       return RouteModel.fromEdgeFunctionJson(
-        Map<String, dynamic>.from(data),
+        payload,
         startLat,
         startLng,
         endLat,

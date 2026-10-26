@@ -30,22 +30,57 @@ class LatLng {
   String toString() => 'LatLng(latitude: $latitude, longitude: $longitude)';
 }
 
-/// Hesaplanan erişilebilir rotayı temsil eden entity.
+/// OSRM'nin döndürdüğü tek bir aday rotayı temsil eden değer nesnesi.
+///
+/// [geometry] GeoJSON sırasından bağımsız olarak enlem/boylam noktalarıdır.
+/// [distance] metre cinsindendir. [score] 0-100 aralığındaki erişilebilirlik
+/// puanıdır.
+class RoutePath {
+  final List<LatLng> geometry;
+  final double distance;
+  final double score;
+
+  const RoutePath({
+    required this.geometry,
+    required this.distance,
+    required this.score,
+  });
+
+  /// Domain katmanındaki mevcut isimlendirmeyle uyumluluk için kısayollar.
+  List<LatLng> get pathPoints => geometry;
+  double get distanceInMeters => distance;
+  double get accessibilityScore => score;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RoutePath &&
+          runtimeType == other.runtimeType &&
+          distance == other.distance &&
+          score == other.score &&
+          _latLngListsEqual(geometry, other.geometry);
+
+  @override
+  int get hashCode => Object.hash(distance, score, Object.hashAll(geometry));
+
+  @override
+  String toString() =>
+      'RoutePath(distance: $distance, score: $score, '
+      'points: ${geometry.length})';
+}
+
+/// Hesaplanan erişilebilir rotayı ve aday rotalarını temsil eden entity.
 class RouteEntity {
   final String id;
   final double startLat;
   final double startLng;
   final double endLat;
   final double endLng;
-  final double distanceInMeters;
 
-  /// 0-100 arasında erişilebilirlik puanı.
-  final double accessibilityScore;
+  /// OSRM'nin döndürdüğü tüm geçerli aday rotalar (en fazla 3).
+  final List<RoutePath> candidateRoutes;
 
-  /// Rota geometrisini oluşturan koordinatlar.
-  final List<LatLng> pathPoints;
-
-  /// Rotayı üreten algoritma: 'astar' veya 'dijkstra'.
+  /// Rotayı üreten algoritma: 'astar', 'dijkstra' veya 'osrm'.
   final String algorithmUsed;
 
   const RouteEntity({
@@ -54,15 +89,66 @@ class RouteEntity {
     required this.startLng,
     required this.endLat,
     required this.endLng,
-    required this.distanceInMeters,
-    required this.accessibilityScore,
-    required this.pathPoints,
+    required this.candidateRoutes,
     required this.algorithmUsed,
   });
 
+  /// En yüksek puanlı aday rota; eşit puanlarda en kısa olan tercih edilir.
+  RoutePath? get bestRoute {
+    if (candidateRoutes.isEmpty) return null;
+    return candidateRoutes[_bestRouteIndex];
+  }
+
+  /// En düşük puanlı alternatif rota.
+  ///
+  /// Tek aday varsa `null` döner. Eşit puanlarda daha uzun rota "riskli"
+  /// alternatif olarak kabul edilir.
+  RoutePath? get riskyRoute {
+    if (candidateRoutes.length < 2) return null;
+
+    final bestIndex = _bestRouteIndex;
+    RoutePath? risky;
+
+    for (var index = 0; index < candidateRoutes.length; index++) {
+      if (index == bestIndex) continue;
+
+      final route = candidateRoutes[index];
+      if (risky == null ||
+          route.score < risky.score ||
+          (route.score == risky.score && route.distance > risky.distance)) {
+        risky = route;
+      }
+    }
+
+    return risky;
+  }
+
+  int get _bestRouteIndex {
+    var bestIndex = 0;
+    var best = candidateRoutes[bestIndex];
+
+    for (var index = 1; index < candidateRoutes.length; index++) {
+      final route = candidateRoutes[index];
+
+      if (route.score > best.score ||
+          (route.score == best.score && route.distance < best.distance)) {
+        best = route;
+        bestIndex = index;
+      }
+    }
+
+    return bestIndex;
+  }
+
+  // En iyi rota üzerinden eski tek-rota API'sini koruyan kısayollar.
+  List<LatLng> get pathPoints => bestRoute?.geometry ?? const <LatLng>[];
+  double get distanceInMeters => bestRoute?.distance ?? 0;
+  double get accessibilityScore => bestRoute?.score ?? 0;
+
   @override
   String toString() =>
-      'RouteEntity(id: $id, distanceInMeters: $distanceInMeters, '
+      'RouteEntity(id: $id, candidates: ${candidateRoutes.length}, '
+      'distanceInMeters: $distanceInMeters, '
       'accessibilityScore: $accessibilityScore, '
       'algorithmUsed: $algorithmUsed)';
 
@@ -76,10 +162,8 @@ class RouteEntity {
           startLng == other.startLng &&
           endLat == other.endLat &&
           endLng == other.endLng &&
-          distanceInMeters == other.distanceInMeters &&
-          accessibilityScore == other.accessibilityScore &&
           algorithmUsed == other.algorithmUsed &&
-          _latLngListsEqual(pathPoints, other.pathPoints);
+          _routePathListsEqual(candidateRoutes, other.candidateRoutes);
 
   @override
   int get hashCode => Object.hash(
@@ -88,11 +172,19 @@ class RouteEntity {
     startLng,
     endLat,
     endLng,
-    distanceInMeters,
-    accessibilityScore,
     algorithmUsed,
-    Object.hashAll(pathPoints),
+    Object.hashAll(candidateRoutes),
   );
+}
+
+bool _routePathListsEqual(List<RoutePath> a, List<RoutePath> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 bool _latLngListsEqual(List<LatLng> a, List<LatLng> b) {

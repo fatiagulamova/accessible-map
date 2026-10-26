@@ -37,20 +37,32 @@ class _MapPageState extends ConsumerState<MapPage> {
   static const String _mapStyleUrl =
       'https://tiles.openfreemap.org/styles/liberty';
   static const String _selectedLocationIconId = 'selected-location';
-  static const String _routeLineId = 'accessible-route';
+  static const String _bestRouteLineId = 'accessible-route-best';
+  static const String _riskyRouteLineId = 'accessible-route-risky';
+  static const String _routeStartSymbolId = 'route-start-symbol';
+  static const String _routeEndSymbolId = 'route-end-symbol';
+  static const String _routeStartPinIconId = 'route-start-pin';
+  static const String _routeEndPinIconId = 'route-end-pin';
   static const String _heatmapSourceId = 'report-density-source';
   static const String _heatmapLayerId = 'report-density-layer';
   static const double _reportMarkerImageSize = 96;
   static const double _reportMarkerIconSize = 0.46;
+  static const double _routePinImageSize = 96;
+  static const double _routePinIconSize = 0.52;
   static const Color _routeColor = Color(0xFF2196F3);
   static const Color _destinationColor = Color(0xFF4CAF50);
   static const String _destinationColorHex = '#4CAF50';
+  static const Color _riskyRouteColor = Color(0xFFF44336);
+  static const String _riskyRouteColorHex = '#F44336';
+  static const Color _startRouteButtonColor = Color(0xFF0D47A1);
 
   MapLibreMapController? _mapController;
   SymbolManager? _reportSymbolManager;
   SymbolManager? _selectionSymbolManager;
+  SymbolManager? _routePointSymbolManager;
   CircleManager? _destinationCircleManager;
-  LineManager? _routeLineManager;
+  LineManager? _bestRouteLineManager;
+  LineManager? _riskyRouteLineManager;
   OnFeatureInteractionCallback? _featureTapCallback;
   final Map<String, ReportEntity> _reportsById = <String, ReportEntity>{};
 
@@ -61,6 +73,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   bool _styleLoaded = false;
   bool _annotationsInitialized = false;
   bool _customIconsLoaded = false;
+  bool _routePinIconsLoaded = false;
   bool _showHeatmap = false;
   bool _heatmapSourceAdded = false;
   bool _heatmapLayerAdded = false;
@@ -73,6 +86,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   int _selectionSyncRequest = 0;
   int _destinationSyncRequest = 0;
   int _routeSyncRequest = 0;
+  int _routePointSyncRequest = 0;
   Future<void> _heatmapOperations = Future<void>.value();
   DateTime? _lastMapControlInteractionAt;
 
@@ -301,14 +315,27 @@ class _MapPageState extends ConsumerState<MapPage> {
       controller,
       enableInteraction: false,
     );
-    final routeLines = LineManager(controller, enableInteraction: false);
+    final routePointSymbols = SymbolManager(
+      controller,
+      iconAllowOverlap: true,
+      iconIgnorePlacement: true,
+      textAllowOverlap: true,
+      textIgnorePlacement: true,
+      enableInteraction: false,
+    );
+    final riskyRouteLines = LineManager(controller, enableInteraction: false);
+    final bestRouteLines = LineManager(controller, enableInteraction: false);
 
     try {
-      // Çizgi katmanı işaretlerin altında kalsın diye önce başlatılır.
-      await routeLines.initialize();
+      // Çizgi katmanları işaretlerin altında kalsın diye önce başlatılır.
+      // Riskli rota altta, önerilen yeşil rota üstte görünür.
+      await riskyRouteLines.initialize();
+      await bestRouteLines.initialize();
       await reportSymbols.initialize();
       await selectionSymbols.initialize();
       await destinationCircles.initialize();
+      // Rota başlangıç/bitiş pinleri diğer işaretlerin üzerinde görünsün.
+      await routePointSymbols.initialize();
     } catch (error) {
       debugPrint('Harita katmanları oluşturulamadı: $error');
       return;
@@ -319,12 +346,41 @@ class _MapPageState extends ConsumerState<MapPage> {
     _reportSymbolManager = reportSymbols;
     _selectionSymbolManager = selectionSymbols;
     _destinationCircleManager = destinationCircles;
-    _routeLineManager = routeLines;
+    _routePointSymbolManager = routePointSymbols;
+    _bestRouteLineManager = bestRouteLines;
+    _riskyRouteLineManager = riskyRouteLines;
+
+    try {
+      await _applyRiskyRouteLineStyle(riskyRouteLines);
+    } catch (error) {
+      debugPrint('Riskli rota kesikli çizgi stili uygulanamadı: $error');
+    }
 
     await _syncReportMarkers();
     await _syncSelectionSymbol();
     await _syncDestinationMarker();
-    await _syncRouteLine();
+    await _syncRouteLines();
+    await _syncRoutePoints();
+  }
+
+  /// Riskli rota katmanına kesikli çizgi görünümünü uygular.
+  ///
+  /// maplibre_gl 0.27'de [LineOptions.linePattern] bir görsel kimliği
+  /// (`String`) bekler; sayısal dash dizisi desteklemez. Bu nedenle istenen
+  /// `[2.0, 2.0]` deseni MapLibre'nin `lineDasharray` özelliğiyle uygulanır.
+  Future<void> _applyRiskyRouteLineStyle(LineManager manager) async {
+    final layerIds = manager.layerIds;
+    if (layerIds.isEmpty || manager.controller.isDisposed) return;
+
+    await manager.controller.setLayerProperties(
+      layerIds.first,
+      const LineLayerProperties(
+        lineColor: _riskyRouteColorHex,
+        lineWidth: 4.0,
+        lineJoin: 'round',
+        lineDasharray: [2.0, 2.0],
+      ),
+    );
   }
 
   Future<void> _loadCustomIcons(MapLibreMapController controller) async {
@@ -354,6 +410,19 @@ class _MapPageState extends ConsumerState<MapPage> {
       } catch (error) {
         debugPrint('${category.label} işaret simgesi yüklenemedi: $error');
       }
+    }
+
+    // Rota başlangıç/bitiş pinlerini cihazda üretip haritaya ekle.
+    try {
+      final startPin = await _generateRoutePinIcon(color: _destinationColor);
+      await controller.addImage(_routeStartPinIconId, startPin);
+
+      final endPin = await _generateRoutePinIcon(color: _riskyRouteColor);
+      await controller.addImage(_routeEndPinIconId, endPin);
+
+      _routePinIconsLoaded = true;
+    } catch (error) {
+      debugPrint('Rota başlangıç/bitiş pinleri yüklenemedi: $error');
     }
   }
 
@@ -412,6 +481,79 @@ class _MapPageState extends ConsumerState<MapPage> {
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       if (data == null) {
         throw StateError('İşaret simgesi PNG verisine dönüştürülemedi');
+      }
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } finally {
+      image.dispose();
+    }
+  }
+
+  Future<Uint8List> _generateRoutePinIcon({required Color color}) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // Beyaz dış hat, pini harita zemininden ayrıştırır.
+    final outlinePainter = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(Icons.location_on.codePoint),
+        style: TextStyle(
+          fontFamily: Icons.location_on.fontFamily,
+          package: Icons.location_on.fontPackage,
+          fontSize: 88,
+          height: 1,
+          color: Colors.white,
+          shadows: [
+            Shadow(
+              color: Colors.black.withValues(alpha: 0.28),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final pinPainter = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(Icons.location_on.codePoint),
+        style: TextStyle(
+          fontFamily: Icons.location_on.fontFamily,
+          package: Icons.location_on.fontPackage,
+          fontSize: 82,
+          height: 1,
+          color: color,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    // Pinin ucu koordinata denk gelsin diye ikonları görselin altına hizala.
+    const bottom = _routePinImageSize - 2;
+    outlinePainter.paint(
+      canvas,
+      Offset(
+        (_routePinImageSize - outlinePainter.width) / 2,
+        bottom - outlinePainter.height,
+      ),
+    );
+    pinPainter.paint(
+      canvas,
+      Offset(
+        (_routePinImageSize - pinPainter.width) / 2,
+        bottom - pinPainter.height,
+      ),
+    );
+
+    final image = await recorder.endRecording().toImage(
+      _routePinImageSize.toInt(),
+      _routePinImageSize.toInt(),
+    );
+
+    try {
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) {
+        throw StateError('Rota pin simgesi PNG verisine dönüştürülemedi');
       }
       return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     } finally {
@@ -545,10 +687,11 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
-  Future<void> _syncRouteLine() async {
-    final manager = _routeLineManager;
-    if (manager == null || !manager.isInitialized) return;
-    if (manager.controller.isDisposed) return;
+  Future<void> _syncRouteLines() async {
+    final bestManager = _bestRouteLineManager;
+    final riskyManager = _riskyRouteLineManager;
+    if (bestManager == null || !bestManager.isInitialized) return;
+    if (bestManager.controller.isDisposed) return;
 
     final state = ref.read(routeControllerProvider);
     if (state is RouteLoading) return;
@@ -556,33 +699,143 @@ class _MapPageState extends ConsumerState<MapPage> {
     final request = ++_routeSyncRequest;
 
     try {
-      await manager.clear();
+      await bestManager.clear();
+      if (riskyManager != null &&
+          riskyManager.isInitialized &&
+          !riskyManager.controller.isDisposed) {
+        await riskyManager.clear();
+      }
+
       if (!mounted ||
           request != _routeSyncRequest ||
+          bestManager.controller.isDisposed) {
+        return;
+      }
+
+      if (state is! RouteLoaded) return;
+
+      final bestRoute = state.route.bestRoute;
+      if (bestRoute == null) return;
+
+      final bestPoints = bestRoute.geometry
+          .map((point) => LatLng(point.latitude, point.longitude))
+          .toList(growable: false);
+
+      if (bestPoints.length >= 2) {
+        await bestManager.add(
+          Line(
+            _bestRouteLineId,
+            LineOptions(
+              geometry: bestPoints,
+              lineColor: _destinationColorHex,
+              lineWidth: 6.0,
+              lineJoin: 'round',
+            ),
+          ),
+        );
+      }
+
+      final riskyRoute = state.route.riskyRoute;
+      if (riskyRoute == null ||
+          riskyManager == null ||
+          !riskyManager.isInitialized ||
+          riskyManager.controller.isDisposed) {
+        return;
+      }
+
+      if (!mounted ||
+          request != _routeSyncRequest ||
+          riskyManager.controller.isDisposed) {
+        return;
+      }
+
+      final riskyPoints = riskyRoute.geometry
+          .map((point) => LatLng(point.latitude, point.longitude))
+          .toList(growable: false);
+      if (riskyPoints.length < 2) return;
+
+      await riskyManager.add(
+        Line(
+          _riskyRouteLineId,
+          LineOptions(
+            geometry: riskyPoints,
+            lineColor: _riskyRouteColorHex,
+            lineWidth: 4.0,
+            lineJoin: 'round',
+          ),
+        ),
+      );
+    } catch (error) {
+      debugPrint('Rota çizgileri güncellenemedi: $error');
+    }
+  }
+
+  Future<void> _syncRoutePoints() async {
+    final manager = _routePointSymbolManager;
+    if (manager == null || !manager.isInitialized) return;
+    if (manager.controller.isDisposed) return;
+
+    final state = ref.read(routeControllerProvider);
+    if (state is RouteLoading) return;
+
+    final request = ++_routePointSyncRequest;
+
+    try {
+      await manager.clear();
+      if (!mounted ||
+          request != _routePointSyncRequest ||
           manager.controller.isDisposed) {
         return;
       }
 
       if (state is! RouteLoaded) return;
 
-      final points = state.route.pathPoints
-          .map((point) => LatLng(point.latitude, point.longitude))
-          .toList(growable: false);
+      final points = state.route.pathPoints;
       if (points.length < 2) return;
 
-      await manager.add(
-        Line(
-          _routeLineId,
-          LineOptions(
-            geometry: points,
-            lineColor: '#2196F3',
-            lineWidth: 5.0,
-            lineJoin: 'round',
+      final start = points.first;
+      final end = points.last;
+      final iconSize = _routePinIconsLoaded ? _routePinIconSize : 0.7;
+      final iconAnchor = _routePinIconsLoaded ? 'bottom' : 'center';
+
+      await manager.addAll([
+        Symbol(
+          _routeStartSymbolId,
+          SymbolOptions(
+            geometry: LatLng(start.latitude, start.longitude),
+            iconImage: _routePinIconsLoaded ? _routeStartPinIconId : 'marker',
+            iconSize: iconSize,
+            iconAnchor: iconAnchor,
+            textField: 'Mevcut Konum',
+            textSize: 13.0,
+            textColor: '#FFFFFF',
+            textHaloColor: '#000000',
+            textHaloWidth: 2.0,
+            textHaloBlur: 0.5,
+            textAnchor: 'top',
+            textOffset: const Offset(0, 0.35),
           ),
         ),
-      );
+        Symbol(
+          _routeEndSymbolId,
+          SymbolOptions(
+            geometry: LatLng(end.latitude, end.longitude),
+            iconImage: _routePinIconsLoaded ? _routeEndPinIconId : 'marker',
+            iconSize: iconSize,
+            iconAnchor: iconAnchor,
+            textField: 'Hedef Nokta',
+            textSize: 13.0,
+            textColor: '#FFFFFF',
+            textHaloColor: '#000000',
+            textHaloWidth: 2.0,
+            textHaloBlur: 0.5,
+            textAnchor: 'top',
+            textOffset: const Offset(0, 0.35),
+          ),
+        ),
+      ]);
     } catch (error) {
-      debugPrint('Rota çizgisi güncellenemedi: $error');
+      debugPrint('Rota başlangıç/bitiş pinleri güncellenemedi: $error');
     }
   }
 
@@ -756,15 +1009,6 @@ class _MapPageState extends ConsumerState<MapPage> {
         (location.longitude - current.longitude).abs() < 0.00002;
   }
 
-  bool _isBartinCenter(LatLng location) {
-    return (location.latitude - _bartinCenter.latitude).abs() < 0.00002 &&
-        (location.longitude - _bartinCenter.longitude).abs() < 0.00002;
-  }
-
-  String _formatCoordinates(double latitude, double longitude) {
-    return '${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)}';
-  }
-
   Future<void> _openNavigationSheet({LatLng? initialDestination}) async {
     if (!mounted || _isResolvingNavigationStart) return;
 
@@ -930,141 +1174,272 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  Widget _buildRouteOverlay(BuildContext context, RouteLoaded routeState) {
-    final route = routeState.route;
-    final distanceInKm = route.distanceInMeters / 1000;
-    final score = route.accessibilityScore;
-    final scoreColor =
-        score >= 80
-            ? Colors.green[700]
-            : score >= 50
-            ? Colors.orange[700]
-            : Colors.red[700];
-    final routeStart = LatLng(route.startLat, route.startLng);
-    final startLabel =
-        _isCurrentGpsLocation(routeStart)
-            ? 'Mevcut Konum'
-            : _isBartinCenter(routeStart)
-            ? 'Bartın Merkezi'
-            : _formatCoordinates(route.startLat, route.startLng);
-    final endLabel = _formatCoordinates(route.endLat, route.endLng);
+  Widget _buildRouteSummaryCard(BuildContext context, RouteLoaded routeState) {
+    final bestRoute = routeState.route.bestRoute;
+    if (bestRoute == null) return const SizedBox.shrink();
+
+    final distance = bestRoute.distance;
 
     return Positioned(
-      top: 124,
       left: 12,
       right: 12,
-      child: _guardMapControl(
-        Material(
-          elevation: 3,
-          borderRadius: BorderRadius.circular(14),
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.97),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: _routeColor.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.route, color: _routeColor),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Başlangıç: $startLabel',
+      bottom: 12,
+      child: Center(
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: _guardMapControl(
+            Material(
+              elevation: 14,
+              shadowColor: Colors.black.withValues(alpha: 0.35),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    color: _destinationColor,
+                    padding: const EdgeInsets.fromLTRB(18, 12, 8, 12),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.verified_rounded,
+                          color: Colors.white,
+                          size: 21,
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Önerilen Erişilebilir Rota',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Bitiş: $endLabel',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(
-                              context,
-                            ).textTheme.bodySmall?.copyWith(
-                              color:
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                        ),
+                        IconButton(
+                          onPressed: _clearRoute,
+                          tooltip: 'Rotayı Temizle',
+                          style: IconButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.18,
+                            ),
+                            minimumSize: const Size(36, 36),
+                            maximumSize: const Size(36, 36),
+                            padding: EdgeInsets.zero,
+                          ),
+                          icon: const Icon(Icons.close, size: 20),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _destinationColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'ERİŞİLEBİLİRLİK SKORU',
+                                      style: TextStyle(
+                                        color: Color(0xFF2E7D32),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.baseline,
+                                      textBaseline: TextBaseline.alphabetic,
+                                      children: [
+                                        Text(
+                                          bestRoute.score.toStringAsFixed(0),
+                                          style: const TextStyle(
+                                            color: Color(0xFF2E7D32),
+                                            fontSize: 42,
+                                            height: 1,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        Text(
+                                          ' / 100',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 6,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _buildRouteDetail(
+                                  context,
+                                  icon: Icons.straighten_rounded,
+                                  label: 'Mesafe',
+                                  value: _formatRouteDistance(distance),
+                                ),
+                                _buildRouteDetail(
+                                  context,
+                                  icon: Icons.schedule_rounded,
+                                  label: 'Tahmini Süre',
+                                  value: _formatWalkingTime(distance),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.straighten,
-                          size: 16,
-                          color: _routeColor,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Mesafe: ${distanceInKm.toStringAsFixed(2)} km',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.accessible, size: 16, color: scoreColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Erişilebilirlik Skoru: '
-                          '${score.toStringAsFixed(0)}/100',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodySmall?.copyWith(
-                            color: scoreColor,
-                            fontWeight: FontWeight.w600,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        onPressed: _startNavigation,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _startRouteButtonColor,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
                           ),
                         ),
-                      ],
+                        icon: const Icon(Icons.navigation_rounded, size: 22),
+                        label: const Text('Rotayı Başlat'),
+                      ),
                     ),
-                  ],
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: _clearRoute,
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.red[700],
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    icon: const Icon(Icons.clear, size: 18),
-                    label: const Text('Rotayı Temizle'),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildRouteDetail(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8F0FE),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 18, color: _startRouteButtonColor),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Color(0xFF1F2937),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _startNavigation() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Navigasyon başlatıldı'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  String _formatRouteDistance(double distanceInMeters) {
+    if (distanceInMeters >= 1000) {
+      return '${(distanceInMeters / 1000).toStringAsFixed(1)} km';
+    }
+
+    return '${distanceInMeters.round()} m';
+  }
+
+  String _formatWalkingTime(double distanceInMeters) {
+    final minutes = (distanceInMeters / 80).ceil();
+
+    if (minutes < 60) return '$minutes dk';
+
+    final hours = minutes ~/ 60;
+    final remainingMinutes = minutes % 60;
+
+    if (remainingMinutes == 0) return '$hours sa';
+    return '$hours sa $remainingMinutes dk';
   }
 
   Widget _buildRouteLoadingOverlay(BuildContext context) {
@@ -1135,7 +1510,8 @@ class _MapPageState extends ConsumerState<MapPage> {
         });
       }
 
-      unawaited(_syncRouteLine());
+      unawaited(_syncRouteLines());
+      unawaited(_syncRoutePoints());
     });
 
     return Scaffold(
@@ -1266,9 +1642,9 @@ class _MapPageState extends ConsumerState<MapPage> {
             onStyleLoadedCallback: _onStyleLoaded,
             onMapClick: (_, coordinates) => _handleMapClick(coordinates),
           ),
-          _buildMapHint(context),
+          if (routeState is! RouteLoaded) _buildMapHint(context),
           if (routeState is RouteLoaded)
-            _buildRouteOverlay(context, routeState)
+            _buildRouteSummaryCard(context, routeState)
           else if (routeState is RouteLoading)
             _buildRouteLoadingOverlay(context),
           Positioned(
@@ -1286,61 +1662,68 @@ class _MapPageState extends ConsumerState<MapPage> {
           ),
         ],
       ),
-      floatingActionButton: _guardMapControl(
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            FloatingActionButton(
-              heroTag: 'navigation-fab',
-              tooltip: 'Navigasyon',
-              onPressed:
-                  _isResolvingNavigationStart ? null : _openNavigationSheet,
-              backgroundColor: _routeColor,
-              foregroundColor: Colors.white,
-              child:
-                  _isResolvingNavigationStart
-                      ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
-                      : const Icon(Icons.directions),
-            ),
-            const SizedBox(height: 12),
-            FloatingActionButton.extended(
-              heroTag: 'report-fab',
-              tooltip:
-                  _isResolvingReportLocation
-                      ? 'Konum alınıyor'
-                      : 'Engel Bildir',
-              onPressed:
-                  _isResolvingReportLocation ? null : _openCreateReportSheet,
-              backgroundColor: const Color(0xFF26A69A),
-              foregroundColor: Colors.white,
-              icon:
-                  _isResolvingReportLocation
-                      ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
-                      : const Icon(Icons.add_a_photo),
-              label: Text(
-                _isResolvingReportLocation
-                    ? 'Konum alınıyor...'
-                    : 'Engel Bildir',
+      floatingActionButton:
+          routeState is RouteLoaded
+              ? null
+              : _guardMapControl(
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    FloatingActionButton(
+                      heroTag: 'navigation-fab',
+                      tooltip: 'Navigasyon',
+                      onPressed:
+                          _isResolvingNavigationStart
+                              ? null
+                              : _openNavigationSheet,
+                      backgroundColor: _routeColor,
+                      foregroundColor: Colors.white,
+                      child:
+                          _isResolvingNavigationStart
+                              ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
+                              : const Icon(Icons.directions),
+                    ),
+                    const SizedBox(height: 12),
+                    FloatingActionButton.extended(
+                      heroTag: 'report-fab',
+                      tooltip:
+                          _isResolvingReportLocation
+                              ? 'Konum alınıyor'
+                              : 'Engel Bildir',
+                      onPressed:
+                          _isResolvingReportLocation
+                              ? null
+                              : _openCreateReportSheet,
+                      backgroundColor: const Color(0xFF26A69A),
+                      foregroundColor: Colors.white,
+                      icon:
+                          _isResolvingReportLocation
+                              ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
+                              : const Icon(Icons.add_a_photo),
+                      label: Text(
+                        _isResolvingReportLocation
+                            ? 'Konum alınıyor...'
+                            : 'Engel Bildir',
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

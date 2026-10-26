@@ -1,7 +1,7 @@
 // ============================================================
 // calculate-route-score
 // OSRM alternatif rotalarını Supabase erişilebilirlik verileriyle
-// puanlar ve en yüksek puanlı rotayı döndürür.
+// puanlar ve en iyi aday rotaları döndürür.
 // ============================================================
 
 import {
@@ -12,6 +12,7 @@ import {
 const OSRM_BASE_URL = 'https://router.project-osrm.org/route/v1/foot';
 const OSRM_TIMEOUT_MS = 20_000;
 const OSRM_ALTERNATIVES = '3';
+const MAX_ROUTE_CANDIDATES = 3;
 const NEARBY_RADIUS_METERS = 100;
 const BOUNDING_BOX_PADDING_DEGREES = 0.001;
 const ACTIVE_REPORT_STATUSES = ['pending', 'validated'] as const;
@@ -174,20 +175,29 @@ Deno.serve(async (request: Request): Promise<Response> => {
       );
     }
 
-    // Ürün kararı: Erişilebilirlik mesafeden daha önemlidir. Bu yüzden en
-    // yüksek puanlı rota seçilir; yalnızca puanlar eşitse en kısa rota tercih
-    // edilir.
-    const bestRoute = selectBestRoute(scoredRoutes);
+    // Ürün kararı: Erişilebilirlik mesafeden daha önemlidir. Adaylar puan
+    // azalan, eşit puanda mesafe artan sırada döndürülür; istemci ilk rotayı
+    // "en iyi", son rotayı "riskli alternatif" olarak kullanır.
+    const candidateRoutes = rankCandidateRoutes(scoredRoutes);
+    const bestRoute = candidateRoutes[0];
+
+    if (!bestRoute) {
+      throw new RouteFunctionError(502, 'Geçerli rota bulunamadı');
+    }
+
     console.log(
-      `Seçilen rota: puan=${bestRoute.score.toFixed(1)}, ` +
+      `Döndürülen rota sayısı: ${candidateRoutes.length}, ` +
+        `en iyi puan=${bestRoute.score.toFixed(1)}, ` +
         `mesafe=${bestRoute.distance.toFixed(1)} m`,
     );
 
     return jsonResponse(
       {
-        geometry: bestRoute.coordinates,
-        distance: bestRoute.distance,
-        score: bestRoute.score,
+        routes: candidateRoutes.map((route) => ({
+          geometry: route.coordinates,
+          distance: route.distance,
+          score: route.score,
+        })),
       },
       200,
     );
@@ -540,22 +550,10 @@ function scoreRoute(
   };
 }
 
-function selectBestRoute(routes: ScoredRoute[]): ScoredRoute {
-  let bestRoute = routes[0];
-
-  for (let index = 1; index < routes.length; index++) {
-    const route = routes[index];
-
-    if (
-      route.score > bestRoute.score ||
-      (route.score === bestRoute.score &&
-        route.distance < bestRoute.distance)
-    ) {
-      bestRoute = route;
-    }
-  }
-
-  return bestRoute;
+function rankCandidateRoutes(routes: ScoredRoute[]): ScoredRoute[] {
+  return [...routes]
+    .sort((a, b) => b.score - a.score || a.distance - b.distance)
+    .slice(0, MAX_ROUTE_CANDIDATES);
 }
 
 function distanceToPathInMeters(
