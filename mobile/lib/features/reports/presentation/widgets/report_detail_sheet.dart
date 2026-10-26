@@ -8,10 +8,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/status_badge.dart';
 import '../../domain/entities/report_entity.dart';
 import '../providers/report_provider.dart';
 
-const Color _brandColor = Color(0xFF1565C0);
+const Color _brandColor = AppColors.primaryBlue;
 
 class ReportDetailSheet extends ConsumerStatefulWidget {
   final ReportEntity report;
@@ -126,7 +128,7 @@ class _ReportDetailSheetState extends ConsumerState<ReportDetailSheet> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      _ReportStatusChip(status: report.status),
+                      StatusBadge(status: report.status),
                     ],
                   ),
                 ),

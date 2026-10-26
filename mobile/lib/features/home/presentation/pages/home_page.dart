@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../../reports/presentation/report_categories.dart';
 import '../../../reports/presentation/utils/report_flow.dart';
 
@@ -16,12 +17,9 @@ import '../../../reports/presentation/utils/report_flow.dart';
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
-  static const Color _brandColor = Color(0xFF1565C0);
-  static const Color _navyText = Color(0xFF1A2B4C);
-  static const Color _greenColor = Color(0xFF43A047);
-  static const Color _orangeColor = Color(0xFFF57C00);
-  static const Color _purpleColor = Color(0xFF8E24AA);
-  static const Color _pageBackground = Color(0xFFF5F7FA);
+  static const Color _brandColor = AppColors.primaryBlue;
+  static const Color _navyText = AppColors.textPrimary;
+  static const Color _pageBackground = AppColors.background;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +48,7 @@ class HomePage extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  'Erişilebilir Şehir',
+                  'Erişilebilir Harita',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: _brandColor,
                     fontWeight: FontWeight.w800,
@@ -100,18 +98,18 @@ class HomePage extends StatelessWidget {
               children: [
                 Expanded(
                   child: _QuickActionCard(
-                    color: _brandColor,
                     icon: Icons.map_rounded,
                     label: 'Harita',
+                    subtitle: 'Engelleri görün',
                     onTap: () => context.go('/map'),
                   ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: _QuickActionCard(
-                    color: _greenColor,
                     icon: Icons.route_rounded,
                     label: 'Rota Oluştur',
+                    subtitle: 'Güvenli güzergâh',
                     onTap: () => context.go('/map'),
                   ),
                 ),
@@ -122,18 +120,18 @@ class HomePage extends StatelessWidget {
               children: [
                 Expanded(
                   child: _QuickActionCard(
-                    color: _orangeColor,
-                    icon: Icons.campaign_rounded,
+                    icon: Icons.add_location_alt_outlined,
                     label: 'Bildirim Yap',
+                    subtitle: 'Engel raporlayın',
                     onTap: () => unawaited(openCreateReportSheet(context)),
                   ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: _QuickActionCard(
-                    color: _purpleColor,
                     icon: Icons.person_rounded,
                     label: 'Profilim',
+                    subtitle: 'Hesap ve ayarlar',
                     onTap: () => context.go('/profile'),
                   ),
                 ),
@@ -167,9 +165,9 @@ class HomePage extends StatelessWidget {
             fontSize: 15,
           ),
           prefixIcon: const Icon(Icons.search_rounded, color: _brandColor),
-          suffixIcon: Icon(
-            Icons.tune_rounded,
-            color: Colors.grey.shade500,
+          suffixIcon: const Icon(
+            Icons.arrow_forward_rounded,
+            color: AppColors.textSecondary,
             size: 22,
           ),
           filled: true,
@@ -354,29 +352,31 @@ class HomePage extends StatelessWidget {
 
 class _QuickActionCard extends StatelessWidget {
   const _QuickActionCard({
-    required this.color,
     required this.icon,
     required this.label,
+    required this.subtitle,
     required this.onTap,
   });
 
-  final Color color;
   final IconData icon;
   final String label;
+  final String subtitle;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: color,
-      elevation: 3,
-      shadowColor: color.withValues(alpha: 0.45),
-      borderRadius: BorderRadius.circular(18),
+      color: AppColors.surface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: AppColors.border),
+      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          height: 108,
+          constraints: const BoxConstraints(minHeight: 108),
           padding: const EdgeInsets.fromLTRB(16, 16, 14, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -385,21 +385,31 @@ class _QuickActionCard extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.22),
+                  color: AppColors.primaryBlue.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: Colors.white, size: 24),
+                child: Icon(icon, color: AppColors.primaryBlue, size: 24),
               ),
-              const Spacer(),
+              const SizedBox(height: 14),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: -0.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],

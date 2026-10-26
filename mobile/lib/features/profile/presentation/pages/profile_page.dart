@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/profile_stats_provider.dart';
@@ -14,7 +15,7 @@ import '../providers/profile_stats_provider.dart';
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
 
-  static const Color _brandColor = Color(0xFF1565C0);
+  static const Color _brandColor = AppColors.primaryBlue;
 
   Future<void> _handleLogout(BuildContext context, WidgetRef ref) async {
     final authController = ref.read(authControllerProvider.notifier);
@@ -66,10 +67,9 @@ class ProfilePage extends ConsumerWidget {
     final statsAsync = ref.watch(profileStatsProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Profil'),
-        backgroundColor: _brandColor,
-        foregroundColor: Colors.white,
       ),
       body:
           user == null
@@ -255,7 +255,7 @@ class _UserStatsView extends StatelessWidget {
     final approvalsColor =
         theme.brightness == Brightness.dark
             ? const Color(0xFF81C784)
-            : const Color(0xFF2E7D32);
+            : AppColors.success;
 
     return IntrinsicHeight(
       child: Row(
@@ -434,7 +434,7 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: const Color(0xFF1565C0)),
+          Icon(icon, size: 20, color: AppColors.primaryBlue),
           const SizedBox(width: 12),
           SizedBox(
             width: 88,

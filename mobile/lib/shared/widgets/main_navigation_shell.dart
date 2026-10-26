@@ -6,10 +6,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../features/reports/presentation/utils/report_flow.dart';
 
 /// Marka mavisi — mockup'taki merkez "+" ve aktif sekme rengi.
-const Color _brandBlue = Color(0xFF1565C0);
+const Color _brandBlue = AppColors.primaryBlue;
 
 /// Eğrisel navigasyon çubuğunun merkez buton indeksi.
 const _centerActionIndex = 2;

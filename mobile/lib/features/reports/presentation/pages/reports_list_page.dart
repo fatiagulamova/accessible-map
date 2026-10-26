@@ -8,14 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/errors/failures.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/status_badge.dart';
 import '../../domain/entities/report_entity.dart';
 import '../providers/report_provider.dart';
 import '../widgets/report_detail_sheet.dart';
 
 class ReportsListPage extends ConsumerWidget {
   const ReportsListPage({super.key});
-
-  static const Color _brandColor = Color(0xFF1565C0);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -24,21 +24,23 @@ class ReportsListPage extends ConsumerWidget {
     final hasActiveFilters = filter.isActive;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Bildirimler'),
-        backgroundColor: _brandColor,
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
             onPressed: () => _showReportFilters(context),
             tooltip: 'Filtrele',
             style:
                 hasActiveFilters
-                    ? IconButton.styleFrom(backgroundColor: Colors.white)
+                    ? IconButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.18),
+                    )
                     : null,
             icon: Icon(
-              Icons.filter_list,
-              color: hasActiveFilters ? _brandColor : Colors.white,
+              hasActiveFilters
+                  ? Icons.filter_alt_rounded
+                  : Icons.filter_list,
             ),
           ),
           IconButton(
@@ -50,7 +52,7 @@ class ReportsListPage extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.go('/map'),
-        backgroundColor: _brandColor,
+        backgroundColor: AppColors.primaryBlue,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_location_alt_outlined),
         label: const Text('Haritadan Bildir'),
@@ -351,7 +353,7 @@ class _ReportFeedCard extends StatelessWidget {
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _ReportStatusChip(status: report.status),
+                      StatusBadge(status: report.status),
                       _ReportDateLabel(createdAt: report.createdAt),
                     ],
                   ),
@@ -423,42 +425,6 @@ class _PhotoPlaceholder extends StatelessWidget {
         icon,
         size: 44,
         color: colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
-      ),
-    );
-  }
-}
-
-class _ReportStatusChip extends StatelessWidget {
-  final ReportStatus status;
-
-  const _ReportStatusChip({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color) = switch (status) {
-      ReportStatus.pending => ('Onay Bekliyor', Colors.orange),
-      ReportStatus.validated => ('Doğrulandı', Colors.green),
-      ReportStatus.rejected => ('Reddedildi', Colors.red),
-      ReportStatus.resolved => ('Çözüldü', Colors.blue),
-    };
-
-    return Semantics(
-      label: 'Bildirim durumu: $label',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: color.withValues(alpha: 0.35)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: color.shade800,
-          ),
-        ),
       ),
     );
   }

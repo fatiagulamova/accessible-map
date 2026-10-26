@@ -20,7 +20,7 @@ class AccessibleMapApp extends ConsumerWidget {
         settings.isHighContrast ? AppTheme.highContrastTheme : null;
 
     return MaterialApp.router(
-      title: 'Accessible Map',
+      title: 'Erişilebilir Harita',
       debugShowCheckedModeBanner: false,
       theme: highContrastTheme ?? AppTheme.lightTheme,
       darkTheme: highContrastTheme ?? AppTheme.darkTheme,

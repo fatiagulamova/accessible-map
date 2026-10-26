@@ -5,6 +5,8 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+
 /// Bir bildirim kategorisinin form etiketini, ikonunu ve rengini taşır.
 ///
 /// Aynı tanımlar hem bildirim formundaki kategori kartlarında hem de harita
@@ -45,14 +47,14 @@ class ReportCategory {
     label: 'Rampa',
     formLabel: 'Rampa Eksikliği',
     icon: Icons.accessible_forward_rounded,
-    color: Color(0xFF43A047),
+    color: AppColors.success,
   );
 
   static const ReportCategory stairs = ReportCategory(
     key: 'stairs',
     label: 'Merdiven',
     icon: Icons.stairs_rounded,
-    color: Color(0xFFF57C00),
+    color: AppColors.warning,
   );
 
   static const ReportCategory sidewalk = ReportCategory(
@@ -60,7 +62,7 @@ class ReportCategory {
     label: 'Kaldırım',
     formLabel: 'Bozuk Kaldırım',
     icon: Icons.warning_rounded,
-    color: Color(0xFFE53935),
+    color: AppColors.error,
   );
 
   static const ReportCategory elevator = ReportCategory(
@@ -68,7 +70,7 @@ class ReportCategory {
     label: 'Asansör',
     formLabel: 'Erişilebilir Giriş',
     icon: Icons.door_front_door_rounded,
-    color: Color(0xFF1565C0),
+    color: AppColors.primaryBlue,
     aliases: <String>['erişilebilir giriş'],
   );
 
@@ -76,7 +78,7 @@ class ReportCategory {
     key: 'other',
     label: 'Diğer',
     icon: Icons.more_horiz_rounded,
-    color: Color(0xFF9E9E9E),
+    color: AppColors.neutral,
   );
 
   /// Formdaki çiplerin ve harita ikonlarının sırası.
