@@ -14,5 +14,6 @@ abstract class RouteRepository {
     required double startLng,
     required double endLat,
     required double endLng,
+    RoutePreferences preferences = const RoutePreferences(),
   });
 }

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../../domain/entities/route_entity.dart';
 import '../providers/route_provider.dart';
 
 /// NavigationSheet kapandıktan sonra harita sayfasının yapacağı eylem.
@@ -61,6 +62,11 @@ class _NavigationSheetState extends ConsumerState<NavigationSheet> {
 
   bool _isCalculating = false;
   String? _calculationError;
+
+  bool _isWheelchair = false;
+  bool _requireElevator = false;
+  bool _preferRamp = false;
+  bool _prioritizeDistance = false;
 
   bool get _hasDestination => _endLat != null && _endLng != null;
 
@@ -252,6 +258,12 @@ class _NavigationSheetState extends ConsumerState<NavigationSheet> {
           startLng: widget.startLng,
           endLat: endLat,
           endLng: endLng,
+          preferences: RoutePreferences(
+            isWheelchair: _isWheelchair,
+            requireElevator: _requireElevator,
+            preferRamp: _preferRamp,
+            prioritizeDistance: _prioritizeDistance,
+          ),
         );
 
     if (!mounted) return;
@@ -447,6 +459,8 @@ class _NavigationSheetState extends ConsumerState<NavigationSheet> {
                   const SizedBox(height: 8),
                   _buildSearchResults(context),
                 ],
+                const SizedBox(height: 16),
+                _buildPreferencesSection(context),
                 if (_calculationError != null) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -508,6 +522,141 @@ class _NavigationSheetState extends ConsumerState<NavigationSheet> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPreferencesSection(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _brandColor.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _brandColor.withValues(alpha: 0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: _brandColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.tune, size: 19, color: _brandColor),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Erişilebilirlik Tercihleri',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Rota puanlaması seçimlerinize göre kişiselleştirilir.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.3,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildPreferenceChip(
+                context,
+                label: 'Tekerlekli Sandalye',
+                icon: Icons.accessible,
+                selected: _isWheelchair,
+                onSelected: (selected) {
+                  setState(() => _isWheelchair = selected);
+                },
+              ),
+              _buildPreferenceChip(
+                context,
+                label: 'Asansör Kullanımı',
+                icon: Icons.elevator,
+                selected: _requireElevator,
+                onSelected: (selected) {
+                  setState(() => _requireElevator = selected);
+                },
+              ),
+              _buildPreferenceChip(
+                context,
+                label: 'Rampa Tercihi',
+                icon: Icons.ramp_right,
+                selected: _preferRamp,
+                onSelected: (selected) {
+                  setState(() => _preferRamp = selected);
+                },
+              ),
+              _buildPreferenceChip(
+                context,
+                label: 'Yaya Önceliği',
+                icon: Icons.directions_walk,
+                selected: _prioritizeDistance,
+                onSelected: (selected) {
+                  setState(() => _prioritizeDistance = selected);
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreferenceChip(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required ValueChanged<bool> onSelected,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return FilterChip(
+      avatar: Icon(
+        icon,
+        size: 18,
+        color: selected ? _brandColor : colorScheme.onSurfaceVariant,
+      ),
+      label: Text(label),
+      selected: selected,
+      onSelected: _isCalculating ? null : onSelected,
+      showCheckmark: false,
+      selectedColor: _brandColor.withValues(alpha: 0.14),
+      backgroundColor: colorScheme.surface,
+      side: BorderSide(
+        color:
+            selected
+                ? _brandColor.withValues(alpha: 0.45)
+                : colorScheme.outlineVariant,
+      ),
+      labelStyle: TextStyle(
+        fontSize: 13,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+        color: selected ? _brandColor : colorScheme.onSurface,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      visualDensity: VisualDensity.compact,
     );
   }
 

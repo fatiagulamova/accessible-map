@@ -18,6 +18,7 @@ class GetAccessibleRouteUseCase {
     required double startLng,
     required double endLat,
     required double endLng,
+    RoutePreferences preferences = const RoutePreferences(),
   }) async {
     if (!_isValidLatitude(startLat)) {
       throw const ValidationFailure(
@@ -48,6 +49,7 @@ class GetAccessibleRouteUseCase {
       startLng: startLng,
       endLat: endLat,
       endLng: endLng,
+      preferences: preferences,
     );
   }
 

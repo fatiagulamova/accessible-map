@@ -22,6 +22,7 @@ class RouteRepositoryImpl implements RouteRepository {
     required double startLng,
     required double endLat,
     required double endLng,
+    RoutePreferences preferences = const RoutePreferences(),
   }) {
     return _handleExceptions(
       () => remoteDataSource.getAccessibleRoute(
@@ -29,6 +30,7 @@ class RouteRepositoryImpl implements RouteRepository {
         startLng: startLng,
         endLat: endLat,
         endLng: endLng,
+        preferences: preferences,
       ),
     );
   }

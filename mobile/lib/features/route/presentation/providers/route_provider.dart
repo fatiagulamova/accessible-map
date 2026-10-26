@@ -85,6 +85,7 @@ class RouteController extends StateNotifier<RouteState> {
     required double startLng,
     required double endLat,
     required double endLng,
+    RoutePreferences preferences = const RoutePreferences(),
   }) async {
     final requestId = ++_requestId;
     state = const RouteLoading();
@@ -95,6 +96,7 @@ class RouteController extends StateNotifier<RouteState> {
         startLng: startLng,
         endLat: endLat,
         endLng: endLng,
+        preferences: preferences,
       );
 
       if (!mounted || requestId != _requestId) return;

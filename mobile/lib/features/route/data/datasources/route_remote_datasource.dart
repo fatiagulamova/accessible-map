@@ -6,6 +6,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/errors/exceptions.dart';
+import '../../domain/entities/route_entity.dart';
 import '../models/route_model.dart';
 
 /// Rota ve erişilebilirlik verilerini uzak kaynaklardan getirir.
@@ -15,6 +16,7 @@ abstract class RouteRemoteDataSource {
     required double startLng,
     required double endLat,
     required double endLng,
+    RoutePreferences preferences = const RoutePreferences(),
   });
 }
 
@@ -31,6 +33,7 @@ class RouteRemoteDataSourceImpl implements RouteRemoteDataSource {
     required double startLng,
     required double endLat,
     required double endLng,
+    RoutePreferences preferences = const RoutePreferences(),
   }) async {
     try {
       final response = await _supabase.functions.invoke(
@@ -40,6 +43,7 @@ class RouteRemoteDataSourceImpl implements RouteRemoteDataSource {
           'startLng': startLng,
           'endLat': endLat,
           'endLng': endLng,
+          'preferences': preferences.toJson(),
         },
       );
 

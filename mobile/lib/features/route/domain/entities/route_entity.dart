@@ -3,6 +3,56 @@
 // Akıllı navigasyon için saf domain modeli
 // ============================================================
 
+/// Kullanıcının rota hesaplamasında uygulanacak erişilebilirlik tercihleri.
+///
+/// Tüm alanlar varsayılan olarak `false`'tur; böylece tercih belirtmeyen
+/// mevcut çağrılar önceki davranışla aynı sonucu alır.
+class RoutePreferences {
+  final bool isWheelchair;
+  final bool requireElevator;
+  final bool preferRamp;
+  final bool prioritizeDistance;
+
+  const RoutePreferences({
+    this.isWheelchair = false,
+    this.requireElevator = false,
+    this.preferRamp = false,
+    this.prioritizeDistance = false,
+  });
+
+  /// Edge Function isteğinde kullanılacak JSON temsili.
+  Map<String, bool> toJson() => {
+    'isWheelchair': isWheelchair,
+    'requireElevator': requireElevator,
+    'preferRamp': preferRamp,
+    'prioritizeDistance': prioritizeDistance,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RoutePreferences &&
+          runtimeType == other.runtimeType &&
+          isWheelchair == other.isWheelchair &&
+          requireElevator == other.requireElevator &&
+          preferRamp == other.preferRamp &&
+          prioritizeDistance == other.prioritizeDistance;
+
+  @override
+  int get hashCode => Object.hash(
+    isWheelchair,
+    requireElevator,
+    preferRamp,
+    prioritizeDistance,
+  );
+
+  @override
+  String toString() =>
+      'RoutePreferences(isWheelchair: $isWheelchair, '
+      'requireElevator: $requireElevator, preferRamp: $preferRamp, '
+      'prioritizeDistance: $prioritizeDistance)';
+}
+
 /// Rota üzerindeki bir koordinatı temsil eden saf Dart değer nesnesi.
 ///
 /// Flutter/MapLibre bağımlılığı yoktur; sunum katmanında MapLibre'nin

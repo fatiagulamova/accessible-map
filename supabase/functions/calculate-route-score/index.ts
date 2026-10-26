@@ -19,17 +19,24 @@ const ACTIVE_REPORT_STATUSES = ['pending', 'validated'] as const;
 const REPORT_QUERY_BATCH_SIZE = 150;
 
 /**
- * Rapor başlığındaki anahtar kelimeye göre tam erişilebilirlik cezası.
+ * Rapor başlıklarındaki anahtar kelimelere göre varsayılan cezalar.
  * Başlık küçük harfe çevrilip `includes` ile aranır; böylece
  * "Bozuk Kaldırım", "bozuk kaldırım" ve "kaldırım" aynı cezayı alır.
- * İlk eşleşen kural uygulanır.
  */
-const REPORT_PENALTIES: ReadonlyArray<readonly [string, number]> = [
-  ['kaldırım', 15],
-  ['rampa', 20],
-  ['geçiş', 10],
-  ['asansör', 15],
-];
+const SIDEWALK_PENALTY = 15;
+const RAMP_PENALTY = 20;
+const ACCESSIBLE_RAMP_PENALTY = 30;
+const STAIRS_PENALTY = 20;
+const WHEELCHAIR_STAIRS_PENALTY = 40;
+const ELEVATOR_PENALTY = 15;
+const REQUIRED_ELEVATOR_PENALTY = 30;
+const CROSSING_PENALTY = 10;
+
+// Yaya önceliğinde erişilebilirlik puanı yarı ağırlıkla, 1 km ölçeğine göre
+// normalize edilen mesafe puanı ise diğer yarı ağırlıkla nihai puana katılır.
+const PRIORITIZE_DISTANCE_ACCESSIBILITY_WEIGHT = 0.5;
+const PRIORITIZE_DISTANCE_DISTANCE_WEIGHT = 0.5;
+const DISTANCE_SCORE_SCALE_METERS = 1000;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -40,11 +47,19 @@ const CORS_HEADERS = {
 
 type GeoCoordinate = [longitude: number, latitude: number];
 
+interface RoutePreferences {
+  isWheelchair: boolean;
+  requireElevator: boolean;
+  preferRamp: boolean;
+  prioritizeDistance: boolean;
+}
+
 interface RouteRequest {
   startLat: number;
   startLng: number;
   endLat: number;
   endLng: number;
+  preferences: RoutePreferences;
 }
 
 interface Point {
@@ -94,6 +109,7 @@ interface RouteCandidate {
 
 interface ScoredRoute extends RouteCandidate {
   score: number;
+  accessibilityScore: number;
   obstacleCount: number;
 }
 
@@ -128,6 +144,10 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     const routeRequest = parseRouteRequest(rawBody);
+    console.log(
+      'Erişilebilirlik tercihleri: ' +
+        JSON.stringify(routeRequest.preferences),
+    );
     const osrmRoutes = await fetchOsrmRoutes(routeRequest);
     console.log(`OSRM'den ${osrmRoutes.length} rota alındı`);
 
@@ -159,26 +179,40 @@ Deno.serve(async (request: Request): Promise<Response> => {
     console.log(`Fetched reports for these locations: ${reports.length}`);
 
     const scoredRoutes: ScoredRoute[] = routeCandidates.map((route) => {
-      const result = scoreRoute(route, reports, locationsById);
+      const result = scoreRoute(
+        route,
+        reports,
+        locationsById,
+        routeRequest.preferences,
+      );
 
       return {
         ...route,
         score: result.score,
+        accessibilityScore: result.score,
         obstacleCount: result.obstacleCount,
       };
     });
 
-    for (const [index, route] of scoredRoutes.entries()) {
+    const preferenceScoredRoutes = applyPreferenceScoring(
+      scoredRoutes,
+      routeRequest.preferences,
+    );
+
+    for (const [index, route] of preferenceScoredRoutes.entries()) {
       console.log(
         `Rota ${index + 1}: mesafe=${route.distance.toFixed(1)} m, ` +
-          `puan=${route.score.toFixed(1)}, engel=${route.obstacleCount}`,
+          `puan=${route.score.toFixed(1)}, ` +
+          `erişilebilirlik=${route.accessibilityScore.toFixed(1)}, ` +
+          `engel=${route.obstacleCount}`,
       );
     }
 
-    // Ürün kararı: Erişilebilirlik mesafeden daha önemlidir. Adaylar puan
-    // azalan, eşit puanda mesafe artan sırada döndürülür; istemci ilk rotayı
-    // "en iyi", son rotayı "riskli alternatif" olarak kullanır.
-    const candidateRoutes = rankCandidateRoutes(scoredRoutes);
+    // Varsayılan ürün kararı: erişilebilirlik mesafeden daha önemlidir.
+    // Yaya önceliğinde puan mesafeyle harmanlanır. Adaylar puan azalan, eşit
+    // puanda mesafe artan sırada döndürülür; istemci ilk rotayı "en iyi",
+    // son rotayı "riskli alternatif" olarak kullanır.
+    const candidateRoutes = rankCandidateRoutes(preferenceScoredRoutes);
     const bestRoute = candidateRoutes[0];
 
     if (!bestRoute) {
@@ -228,6 +262,7 @@ function parseRouteRequest(value: unknown): RouteRequest {
   const startLng = asFiniteNumber(body.startLng);
   const endLat = asFiniteNumber(body.endLat);
   const endLng = asFiniteNumber(body.endLng);
+  const preferences = parseRoutePreferences(body.preferences);
 
   if (
     startLat === null ||
@@ -254,7 +289,53 @@ function parseRouteRequest(value: unknown): RouteRequest {
     throw new RouteFunctionError(400, 'Koordinatlar geçerli aralıkta değil');
   }
 
-  return { startLat, startLng, endLat, endLng };
+  return { startLat, startLng, endLat, endLng, preferences };
+}
+
+function parseRoutePreferences(value: unknown): RoutePreferences {
+  if (value === undefined || value === null) {
+    return {
+      isWheelchair: false,
+      requireElevator: false,
+      preferRamp: false,
+      prioritizeDistance: false,
+    };
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new RouteFunctionError(
+      400,
+      'preferences bir JSON nesnesi olmalıdır',
+    );
+  }
+
+  const body = value as Record<string, unknown>;
+
+  return {
+    isWheelchair: parseBooleanPreference(body.isWheelchair, 'isWheelchair'),
+    requireElevator: parseBooleanPreference(
+      body.requireElevator,
+      'requireElevator',
+    ),
+    preferRamp: parseBooleanPreference(body.preferRamp, 'preferRamp'),
+    prioritizeDistance: parseBooleanPreference(
+      body.prioritizeDistance,
+      'prioritizeDistance',
+    ),
+  };
+}
+
+function parseBooleanPreference(value: unknown, field: string): boolean {
+  if (value === undefined || value === null) return false;
+
+  if (typeof value !== 'boolean') {
+    throw new RouteFunctionError(
+      400,
+      `preferences.${field} boolean olmalıdır`,
+    );
+  }
+
+  return value;
 }
 
 // ============================================================
@@ -490,12 +571,32 @@ async function fetchActiveReports(
 // PUANLAMA VE MESAFE HESABI
 // ============================================================
 
-function penaltyForReport(title: string | null): number {
+function penaltyForReport(
+  title: string | null,
+  preferences: RoutePreferences,
+): number {
   const normalizedTitle = (title ?? '').trim().toLowerCase();
 
-  for (const [keyword, penalty] of REPORT_PENALTIES) {
-    if (normalizedTitle.includes(keyword)) return penalty;
+  if (normalizedTitle.includes('merdiven')) {
+    return preferences.isWheelchair
+      ? WHEELCHAIR_STAIRS_PENALTY
+      : STAIRS_PENALTY;
   }
+
+  if (normalizedTitle.includes('rampa')) {
+    return preferences.isWheelchair || preferences.preferRamp
+      ? ACCESSIBLE_RAMP_PENALTY
+      : RAMP_PENALTY;
+  }
+
+  if (normalizedTitle.includes('asansör')) {
+    return preferences.requireElevator
+      ? REQUIRED_ELEVATOR_PENALTY
+      : ELEVATOR_PENALTY;
+  }
+
+  if (normalizedTitle.includes('kaldırım')) return SIDEWALK_PENALTY;
+  if (normalizedTitle.includes('geçiş')) return CROSSING_PENALTY;
 
   return 0;
 }
@@ -519,6 +620,7 @@ function scoreRoute(
   route: RouteCandidate,
   reports: ReportRow[],
   locationsById: Map<string, Point>,
+  preferences: RoutePreferences,
 ): { score: number; obstacleCount: number } {
   let score = 100;
   let obstacleCount = 0;
@@ -536,7 +638,7 @@ function scoreRoute(
         `distance: ${distance.toFixed(1)}m`,
     );
 
-    const fullPenalty = penaltyForReport(report.title);
+    const fullPenalty = penaltyForReport(report.title, preferences);
     const multiplier = penaltyMultiplierForStatus(report.status);
 
     if (fullPenalty === 0 || multiplier === 0) continue;
@@ -548,6 +650,31 @@ function scoreRoute(
     score: Math.max(0, Math.min(100, score)),
     obstacleCount,
   };
+}
+
+/**
+ * Yaya önceliği seçildiğinde erişilebilirlik puanının ağırlığını yarıya
+ * indirir ve mesafeyi 1 km ölçeğinde normalize ederek nihai puana katar.
+ * Böylece kısa rotalar daha güçlü biçimde tercih edilir.
+ */
+function applyPreferenceScoring(
+  routes: ScoredRoute[],
+  preferences: RoutePreferences,
+): ScoredRoute[] {
+  if (!preferences.prioritizeDistance) return routes;
+
+  return routes.map((route) => {
+    const distanceScore =
+      100 / (1 + route.distance / DISTANCE_SCORE_SCALE_METERS);
+
+    return {
+      ...route,
+      score:
+        route.accessibilityScore *
+          PRIORITIZE_DISTANCE_ACCESSIBILITY_WEIGHT +
+        distanceScore * PRIORITIZE_DISTANCE_DISTANCE_WEIGHT,
+    };
+  });
 }
 
 function rankCandidateRoutes(routes: ScoredRoute[]): ScoredRoute[] {
